@@ -1,7 +1,8 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+import AppLogo from '@/components/AppLogo.vue'
 
 const router = useRouter()
 const email = ref('')
@@ -9,22 +10,56 @@ const password = ref('')
 const rememberMe = ref(false)
 const errorMessage = ref('')
 const isLoading = ref(false)
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+const googleReady = ref(false)
+
+const finishLogin = (data) => {
+  localStorage.setItem('token', data.access_token)
+  localStorage.setItem('userEmail', data.email)
+  localStorage.setItem('userRole', data.role)
+  router.push(data.role === 'admin' ? '/admin' : '/recipes')
+}
+
+const handleGoogleCredential = async (googleResponse) => {
+  try {
+    const response = await axios.post('http://localhost:8001/api/auth/google', { credential: googleResponse.credential })
+    finishLogin(response.data)
+  } catch (error) {
+    errorMessage.value = error.response?.data?.detail || 'Google-inloggningen misslyckades.'
+  }
+}
+
+onMounted(() => {
+  if (!googleClientId) return
+  const script = document.createElement('script')
+  script.src = 'https://accounts.google.com/gsi/client'
+  script.async = true
+  script.onload = () => {
+    window.google.accounts.id.initialize({ client_id: googleClientId, callback: handleGoogleCredential })
+    googleReady.value = true
+  }
+  document.head.appendChild(script)
+})
+
+const startGoogleLogin = () => {
+  if (!googleReady.value) {
+    errorMessage.value = 'Google-inloggning är inte konfigurerad ännu.'
+    return
+  }
+  window.google.accounts.id.prompt()
+}
 
 const handleLogin = async () => {
   errorMessage.value = ''
   isLoading.value = true
   try {
-    const response = await axios.post('http://localhost:8000/api/login', {
+    const response = await axios.post('http://localhost:8001/api/auth/login', {
       email: email.value,
       password: password.value
     })
     
     // Spara JWT-token i localStorage
-    localStorage.setItem('token', response.data.access_token)
-    localStorage.setItem('userEmail', response.data.email)
-    
-    // Omdirigera till startsidan eller receptsidan
-    router.push('/')
+    finishLogin(response.data)
   } catch (error) {
     errorMessage.value = error.response?.data?.detail || 'Inloggningen misslyckades. Kontrollera dina uppgifter.'
   } finally {
@@ -37,12 +72,9 @@ const handleLogin = async () => {
   <div class="page-container">
     <!-- Header / Navbar -->
     <header class="navbar">
-      <div class="logo">
-        <span class="logo-icon">📖</span>
-        <span class="logo-text">Köksboken</span>
-      </div>
+      <AppLogo />
       <nav class="nav-links">
-        <router-link to="/explore" class="nav-link">Utforska recept</router-link>
+        <router-link to="/recipes" class="nav-link">Utforska recept</router-link>
         <router-link to="/register" class="btn-outline">Skapa konto</router-link>
       </nav>
     </header>
@@ -87,7 +119,7 @@ const handleLogin = async () => {
             <div class="input-group">
               <label>Lösenord</label>
               <div class="input-wrapper">
-                <span class="input-icon">🔒</span>
+                <span class="input-icon lock-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
                 <input 
                   type="password" 
                   v-model="password" 
@@ -114,7 +146,7 @@ const handleLogin = async () => {
             <span>ELLER</span>
           </div>
 
-          <button class="btn-google">
+          <button class="btn-google" type="button" @click="startGoogleLogin">
             <span class="google-icon">G</span>
             Logga in med Google
           </button>
@@ -310,6 +342,7 @@ const handleLogin = async () => {
   left: 1rem;
   color: #a0988e;
 }
+.lock-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 .input-wrapper input {
   width: 100%;
@@ -454,7 +487,7 @@ const handleLogin = async () => {
 }
 
 /* Responsivitet för mindre skärmar */
-@media (max-width: 768px) {
+@media (max-width: 560px) {
   .card-grid {
     grid-template-columns: 1fr;
   }
@@ -465,4 +498,5 @@ const handleLogin = async () => {
     padding: 1rem;
   }
 }
+.navbar { min-height: 90px; padding: 1rem clamp(2rem, 6vw, 8rem); }.navbar :deep(.app-logo) { flex-shrink: 0; }.hero-panel { background-image: linear-gradient(0deg, rgb(25 18 14 / 58%), rgb(25 18 14 / 5%)), url('https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=85&w=1200'); background-position: center; }.card-grid { max-width: 1180px; }.form-panel { padding: clamp(2.5rem, 5vw, 4.5rem); }.footer { padding-top: 2.2rem; }
 </style>

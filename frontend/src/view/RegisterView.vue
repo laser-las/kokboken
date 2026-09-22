@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+import AppLogo from '@/components/AppLogo.vue'
 
 const router = useRouter()
 const email = ref('')
@@ -20,7 +21,7 @@ const handleRegister = async () => {
 
   isLoading.value = true
   try {
-    const response = await axios.post('http://localhost:8000/api/auth/register', {
+    const response = await axios.post('http://localhost:8001/api/auth/register', {
       email: email.value,
       password: password.value
     })
@@ -45,12 +46,9 @@ const handleRegister = async () => {
   <div class="page-container">
     <!-- Header / Navbar -->
     <header class="navbar">
-      <div class="logo">
-        <span class="logo-icon">📖</span>
-        <span class="logo-text">Köksboken</span>
-      </div>
+      <AppLogo />
       <nav class="nav-links">
-        <router-link to="/explore" class="nav-link">Utforska recept</router-link>
+        <router-link to="/recipes" class="nav-link">Utforska recept</router-link>
         <router-link to="/login" class="btn-outline">Logga in</router-link>
       </nav>
     </header>
@@ -384,7 +382,7 @@ const handleRegister = async () => {
   color: #78716a;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 560px) {
   .card-grid {
     grid-template-columns: 1fr;
   }
@@ -395,4 +393,5 @@ const handleRegister = async () => {
     padding: 1rem;
   }
 }
+.navbar { min-height: 90px; padding: 1rem clamp(2rem, 6vw, 8rem); }.navbar :deep(.app-logo) { flex-shrink: 0; }.hero-panel { background-image: linear-gradient(0deg, rgb(25 18 14 / 58%), rgb(25 18 14 / 5%)), url('https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=85&w=1200'); background-position: center; }.card-grid { max-width: 1180px; }.form-panel { padding: clamp(2.5rem, 5vw, 4.5rem); }.footer { padding-top: 2.2rem; }
 </style>
