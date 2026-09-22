@@ -20,15 +20,19 @@ const handleRegister = async () => {
 
   isLoading.value = true
   try {
-    const response = await axios.post('http://localhost:8000/api/register', {
+    const response = await axios.post('http://localhost:8000/api/auth/register', {
       email: email.value,
       password: password.value
     })
 
-    localStorage.setItem('token', response.data.access_token)
-    localStorage.setItem('userEmail', response.data.email)
+    if (response.data.access_token) {
+      localStorage.setItem('token', response.data.access_token)
+    }
+    if (response.data.email) {
+      localStorage.setItem('userEmail', response.data.email)
+    }
 
-    router.push('/')
+    router.push('/login')
   } catch (error) {
     errorMessage.value = error.response?.data?.detail || 'Det gick inte att skapa kontot.'
   } finally {

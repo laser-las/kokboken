@@ -1,15 +1,15 @@
 import os
-from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
+from motor.motor_asyncio import AsyncIOMotorClient
 
-# Läs in miljövariabler från .env-filen
+# Ladda variabler från .env-filen
 load_dotenv()
 
-# Hämta MongoDB URI från .env (eller använd standard-URL för lokal MongoDB)
-MONGO_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+# Hämta MONGODB_URI från .env
+MONGO_URL = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 
-# Skapa databasanslutning
-client = AsyncIOMotorClient(MONGO_URI)
+client = AsyncIOMotorClient(MONGO_URL)
+db = client.koksboken
 
-# Välj databasnamn (byt 'kokboken' om du vill ha ett annat namn i MongoDB)
-db = client.kokboken
+users_collection = db.get_collection("users")
+recipes_collection = db.get_collection("recipes")
