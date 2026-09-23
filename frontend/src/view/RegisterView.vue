@@ -81,11 +81,11 @@ const handleRegister = async () => {
               <label>E-postadress</label>
               <div class="input-wrapper">
                 <span class="input-icon">✉</span>
-                <input 
-                  type="email" 
-                  v-model="email" 
-                  placeholder="exempel@koksboken.se" 
-                  required 
+                <input
+                  type="email"
+                  v-model="email"
+                  placeholder="exempel@koksboken.se"
+                  required
                 />
               </div>
             </div>
@@ -93,12 +93,12 @@ const handleRegister = async () => {
             <div class="input-group">
               <label>Lösenord</label>
               <div class="input-wrapper">
-                <span class="input-icon">🔒</span>
-                <input 
-                  type="password" 
-                  v-model="password" 
-                  placeholder="Välj ett säkert lösenord" 
-                  required 
+                <span class="input-icon lock-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+                <input
+                  type="password"
+                  v-model="password"
+                  placeholder="Välj ett säkert lösenord"
+                  required
                 />
               </div>
             </div>
@@ -106,12 +106,12 @@ const handleRegister = async () => {
             <div class="input-group">
               <label>Bekräfta lösenord</label>
               <div class="input-wrapper">
-                <span class="input-icon">🔒</span>
-                <input 
-                  type="password" 
-                  v-model="confirmPassword" 
-                  placeholder="Upprepa lösenord" 
-                  required 
+                <span class="input-icon lock-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+                <input
+                  type="password"
+                  v-model="confirmPassword"
+                  placeholder="Upprepa lösenord"
+                  required
                 />
               </div>
             </div>
@@ -122,7 +122,7 @@ const handleRegister = async () => {
           </form>
 
           <p class="switch-mode">
-            Har du redan ett konto? 
+            Har du redan ett konto?
             <router-link to="/login">Logga in här</router-link>
           </p>
         </div>
@@ -307,6 +307,7 @@ const handleRegister = async () => {
   left: 1rem;
   color: #a0988e;
 }
+.lock-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 .input-wrapper input {
   width: 100%;

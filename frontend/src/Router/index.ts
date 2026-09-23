@@ -3,6 +3,7 @@ import LoginView from '@/view/LoginView.vue'
 import RegisterView from '@/view/RegisterView.vue'
 import RecipesView from '@/view/RecipesView.vue'
 import RecipeDetailView from '@/view/RecipeDetailView.vue'
+import RecipeEditorView from '@/view/RecipeEditorView.vue'
 import ProfileView from '@/view/ProfileView.vue'
 import AdminView from '@/view/AdminView.vue'
 
@@ -28,7 +29,20 @@ const router = createRouter({
     {
       path: '/profile',
       name: 'profile',
-      component: ProfileView
+      component: ProfileView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/recipes/new',
+      name: 'recipe-new',
+      component: RecipeEditorView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/recipes/:slug/edit',
+      name: 'recipe-edit',
+      component: RecipeEditorView,
+      meta: { requiresAuth: true }
     },
     {
       path: '/recipes/:slug',
@@ -48,6 +62,8 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
+  const isLoggedIn = !!localStorage.getItem('token')
+  if (to.meta.requiresAuth && !isLoggedIn) return '/login'
   if (to.meta.requiresAdmin && localStorage.getItem('userRole') !== 'admin') return '/recipes'
 })
 

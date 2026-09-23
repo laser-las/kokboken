@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import AppLogo from '@/components/AppLogo.vue'
+import { refreshFavorites } from '@/composables/useFavorites'
 
 const router = useRouter()
 const email = ref('')
@@ -17,6 +18,7 @@ const finishLogin = (data) => {
   localStorage.setItem('token', data.access_token)
   localStorage.setItem('userEmail', data.email)
   localStorage.setItem('userRole', data.role)
+  refreshFavorites()
   router.push(data.role === 'admin' ? '/admin' : '/recipes')
 }
 
@@ -57,7 +59,7 @@ const handleLogin = async () => {
       email: email.value,
       password: password.value
     })
-    
+
     // Spara JWT-token i localStorage
     finishLogin(response.data)
   } catch (error) {
@@ -82,7 +84,7 @@ const handleLogin = async () => {
     <!-- Main Content Grid -->
     <main class="main-content">
       <div class="card-grid">
-        
+
         <!-- Vänster sida: Hero-bild med text -->
         <div class="hero-panel">
           <div class="hero-overlay">
@@ -107,11 +109,11 @@ const handleLogin = async () => {
               <label>E-postadress</label>
               <div class="input-wrapper">
                 <span class="input-icon">✉</span>
-                <input 
-                  type="email" 
-                  v-model="email" 
-                  placeholder="exempel@koksboken.se" 
-                  required 
+                <input
+                  type="email"
+                  v-model="email"
+                  placeholder="exempel@koksboken.se"
+                  required
                 />
               </div>
             </div>
@@ -120,11 +122,11 @@ const handleLogin = async () => {
               <label>Lösenord</label>
               <div class="input-wrapper">
                 <span class="input-icon lock-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-                <input 
-                  type="password" 
-                  v-model="password" 
-                  placeholder="Ditt säkra lösenord" 
-                  required 
+                <input
+                  type="password"
+                  v-model="password"
+                  placeholder="Ditt säkra lösenord"
+                  required
                 />
               </div>
             </div>
@@ -152,7 +154,7 @@ const handleLogin = async () => {
           </button>
 
           <p class="switch-mode">
-            Ny hos Köksboken? 
+            Ny hos Köksboken?
             <router-link to="/register">Skapa ett gratis konto</router-link>
           </p>
         </div>

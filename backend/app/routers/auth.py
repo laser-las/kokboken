@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 import bcrypt
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,6 +21,9 @@ class RoleUpdate(BaseModel):
     role: str
 class GoogleLogin(BaseModel):
     credential: str
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -27,6 +31,14 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 def token(email: str, role: str) -> str:
     return jwt.encode({"sub": email, "role": role, "exp": datetime.now(timezone.utc) + timedelta(hours=8)}, JWT_SECRET, algorithm="HS256")
+
+def public_profile(u: dict) -> dict:
+    return {
+        "email": u["email"],
+        "role": u.get("role", "user"),
+        "name": u.get("name") or u["email"].split("@")[0],
+        "avatar_url": u.get("avatar_url"),
+    }
 
 async def current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try: payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
@@ -43,7 +55,14 @@ async def register_user(user: UserRegister):
     email = user.email.lower()
     if await users_collection.find_one({"email": email}): raise HTTPException(status_code=400, detail="Användaren finns redan.")
     role = "admin" if email in ADMIN_EMAILS else "user"
-    result = await users_collection.insert_one({"email": email, "password": hash_password(user.password), "role": role, "created_at": datetime.now(timezone.utc)})
+    result = await users_collection.insert_one({
+        "email": email,
+        "password": hash_password(user.password),
+        "role": role,
+        "name": email.split("@")[0],
+        "avatar_url": None,
+        "created_at": datetime.now(timezone.utc),
+    })
     return {"message": "Konto skapat.", "id": str(result.inserted_id), "email": email, "role": role}
 
 @router.post("/login")
@@ -52,7 +71,14 @@ async def login_user(user: UserLogin):
     if not existing or not existing.get("password") or not verify_password(user.password, existing["password"]): raise HTTPException(status_code=401, detail="Fel e-postadress eller lösenord.")
     role = "admin" if email in ADMIN_EMAILS else existing.get("role", "user")
     if role != existing.get("role", "user"): await users_collection.update_one({"_id": existing["_id"]}, {"$set": {"role": role}})
-    return {"access_token": token(email, role), "token_type": "bearer", "email": email, "role": role}
+    return {
+        "access_token": token(email, role),
+        "token_type": "bearer",
+        "email": email,
+        "role": role,
+        "name": existing.get("name") or email.split("@")[0],
+        "avatar_url": existing.get("avatar_url"),
+    }
 
 @router.post("/google")
 async def google_login(login: GoogleLogin):
@@ -71,10 +97,30 @@ async def google_login(login: GoogleLogin):
     role = "admin" if email in ADMIN_EMAILS else "user"
     await users_collection.update_one(
         {"email": email},
-        {"$setOnInsert": {"email": email, "google_id": identity["sub"], "created_at": datetime.now(timezone.utc)}, "$set": {"role": role}},
+        {"$setOnInsert": {"email": email, "google_id": identity["sub"], "name": email.split("@")[0], "avatar_url": identity.get("picture"), "created_at": datetime.now(timezone.utc)}, "$set": {"role": role}},
         upsert=True,
     )
-    return {"access_token": token(email, role), "token_type": "bearer", "email": email, "role": role}
+    existing = await users_collection.find_one({"email": email})
+    return {
+        "access_token": token(email, role),
+        "token_type": "bearer",
+        "email": email,
+        "role": role,
+        "name": existing.get("name") or email.split("@")[0],
+        "avatar_url": existing.get("avatar_url"),
+    }
+
+@router.get("/me")
+async def get_me(user: dict = Depends(current_user)):
+    return public_profile(user)
+
+@router.patch("/me")
+async def update_me(update: ProfileUpdate, user: dict = Depends(current_user)):
+    changes = {k: v for k, v in update.model_dump().items() if v is not None}
+    if changes:
+        await users_collection.update_one({"_id": user["_id"]}, {"$set": changes})
+    updated = await users_collection.find_one({"_id": user["_id"]})
+    return public_profile(updated)
 
 @router.get("/users")
 async def list_users(_: dict = Depends(require_admin)):

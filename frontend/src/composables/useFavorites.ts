@@ -1,14 +1,39 @@
 import { computed, ref } from 'vue'
 
-const storageKey = 'favoriteRecipes'
-const stored = typeof window === 'undefined' ? [] : JSON.parse(localStorage.getItem(storageKey) || '[]')
-const favoriteSlugs = ref<string[]>(Array.isArray(stored) ? stored : [])
+function currentKey() {
+  const email = localStorage.getItem('userEmail') || 'guest'
+  return `favoriteRecipes:${email}`
+}
+
+function load(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(currentKey())
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+const favoriteSlugs = ref<string[]>(load())
+
+// Anropas efter inloggning/utloggning så listan byts till rätt användares favoriter
+export function refreshFavorites() {
+  favoriteSlugs.value = load()
+}
 
 export function useFavorites() {
   const isFavorite = (slug: string) => favoriteSlugs.value.includes(slug)
   const toggleFavorite = (slug: string) => {
-    favoriteSlugs.value = isFavorite(slug) ? favoriteSlugs.value.filter((item) => item !== slug) : [...favoriteSlugs.value, slug]
-    localStorage.setItem(storageKey, JSON.stringify(favoriteSlugs.value))
+    favoriteSlugs.value = isFavorite(slug)
+      ? favoriteSlugs.value.filter((item) => item !== slug)
+      : [...favoriteSlugs.value, slug]
+    localStorage.setItem(currentKey(), JSON.stringify(favoriteSlugs.value))
   }
-  return { favoriteSlugs: computed(() => favoriteSlugs.value), isFavorite, toggleFavorite }
+  return {
+    favoriteSlugs: computed(() => favoriteSlugs.value),
+    isFavorite,
+    toggleFavorite,
+  }
 }
