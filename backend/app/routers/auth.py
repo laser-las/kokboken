@@ -10,6 +10,7 @@ from app.database import users_collection
 
 router = APIRouter(tags=["Auth"])
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 JWT_SECRET = os.getenv("JWT_SECRET", "local-development-secret-change-me")
 ADMIN_EMAILS = {e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()}
 
@@ -49,6 +50,18 @@ async def current_user(credentials: HTTPAuthorizationCredentials = Depends(secur
 def require_admin(user=Depends(current_user)):
     if user.get("role", "user") != "admin": raise HTTPException(status_code=403, detail="Admin access required.")
     return user
+
+async def optional_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security)):
+    # Som current_user, men returnerar None istället för att kasta fel om
+    # ingen (eller en ogiltig) token skickas med. Används för publika endpoints
+    # som ändå vill veta vem som är inloggad om någon är det.
+    if not credentials:
+        return None
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
+    except jwt.PyJWTError:
+        return None
+    return await users_collection.find_one({"email": payload.get("sub")})
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_user(user: UserRegister):

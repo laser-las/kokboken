@@ -13,3 +13,5 @@ db = client.koksboken
 
 users_collection = db.get_collection("users")
 recipes_collection = db.get_collection("recipes")
+categories_collection = db.get_collection("categories")
+contact_collection = db.get_collection("contact_messages")

@@ -23,4 +23,5 @@ export interface Recipe {
   ingredients: string[]
   steps: string[]
   createdBy: string
+  isPublic: boolean
 }
