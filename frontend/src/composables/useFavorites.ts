@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 
 function currentKey() {
-  const email = localStorage.getItem('userEmail') || 'guest'
+  const email = sessionStorage.getItem('userEmail') || 'guest'
   return `favoriteRecipes:${email}`
 }
 

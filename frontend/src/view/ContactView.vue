@@ -4,7 +4,7 @@ import { api } from '@/lib/api'
 import AppLogo from '@/components/AppLogo.vue'
 import AppNavProfile from '@/components/AppNavProfile.vue'
 
-const isLoggedIn = !!localStorage.getItem('token')
+const isLoggedIn = !!sessionStorage.getItem('token')
 
 const name = ref('')
 const email = ref('')

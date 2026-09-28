@@ -189,7 +189,9 @@ async function save() {
               <span v-else>Ingen bild vald</span>
             </div>
             <div class="image-actions">
-              <input ref="imageInput" type="file" accept="image/*" @change="onImageSelected" />
+              <input ref="imageInput" type="file" accept="image/*" hidden @change="onImageSelected" />
+              <button type="button" class="pick-image" @click="imageInput?.click()">{{ image ? 'Byt bild' : 'Välj bild' }}</button>
+              <small class="hint">JPG eller PNG. Bilden komprimeras automatiskt.</small>
               <button v-if="image" type="button" class="remove-image" @click="removeImage">Ta bort bild</button>
             </div>
           </div>
@@ -273,4 +275,8 @@ footer { padding: 1.8rem; background: #f0e9e1; text-align: center; color: #45383
 .fade-enter-active, .fade-leave-active { transition: opacity .18s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 @media (max-width: 620px) { .row { grid-template-columns: 1fr; } .image-uploader { flex-direction: column; align-items: flex-start; } }
+.pick-image { align-self: flex-start; padding: .55rem 1.1rem; border: 1px solid #e3d6cb; border-radius: 999px; background: #fff; color: #4a3d36; font: 600 .82rem Inter, sans-serif; cursor: pointer; }
+.pick-image:hover { border-color: #c4623f; color: #c4623f; background: #fffaf6; }
+.hint { color: #9a8c84; font-weight: 400; }
+.preview { border-radius: 14px; }
 </style>

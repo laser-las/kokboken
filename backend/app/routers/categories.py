@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from backend.app.database import categories_collection
+from app.database import categories_collection
 from app.routers.auth import require_admin
 
 router = APIRouter(prefix="/api/categories", tags=["Categories"])

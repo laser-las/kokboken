@@ -15,9 +15,9 @@ const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
 const googleReady = ref(false)
 
 const finishLogin = (data) => {
-  localStorage.setItem('token', data.access_token)
-  localStorage.setItem('userEmail', data.email)
-  localStorage.setItem('userRole', data.role)
+  sessionStorage.setItem('token', data.access_token)
+  sessionStorage.setItem('userEmail', data.email)
+  sessionStorage.setItem('userRole', data.role)
   refreshFavorites()
   router.push(data.role === 'admin' ? '/admin' : '/recipes')
 }

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth, recipes, categories, contact
-from backend.app.database import categories_collection
+from app.database import categories_collection
 
 app = FastAPI(title="Köksboken API")
 

@@ -5,12 +5,13 @@ import { api, type Recipe } from '@/lib/api'
 import { useFavorites } from '@/composables/useFavorites'
 import AppLogo from '@/components/AppLogo.vue'
 import AppNavProfile from '@/components/AppNavProfile.vue'
+import AuthorChip from '@/components/AuthorChip.vue'
 
 const router = useRouter()
 const search = ref('')
 const selectedCategory = ref('Alla recept')
 const { isFavorite, toggleFavorite } = useFavorites()
-const isLoggedIn = !!localStorage.getItem('token')
+const isLoggedIn = !!sessionStorage.getItem('token')
 
 const recipes = ref<Recipe[]>([])
 const suggestedCategories = ref<string[]>([])
@@ -111,6 +112,7 @@ function createRecipe() {
             <img :src="recipe.image || 'https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=900&q=85'" :alt="recipe.title" />
             <div class="recipe-details">
               <h2>{{ recipe.title }}</h2>
+              <AuthorChip class="card-author" :email="recipe.createdBy" :name="recipe.authorName" />
               <div class="card-footer">
                 <span class="time">◷ {{ recipe.time }}</span>
                 <button class="favorite" type="button" :aria-label="`Växla favorit för ${recipe.title}`" @click.prevent="toggleFavorite(recipe.slug)">{{ isFavorite(recipe.slug) ? '♥' : '♡' }}</button>
@@ -145,4 +147,5 @@ h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.1rem); } .intro > p:nth-of-type(2)
 .card-fade-enter-active { transition: opacity .3s ease, transform .3s ease; } .card-fade-enter-from { opacity: 0; transform: translateY(8px); }
 footer { padding: 2rem; text-align: center; background: #f0e9e1; color: #453833; font-size: .9rem; font-style: italic; font-weight: bold; } footer span::after { content: ''; display: block; width: 20px; height: 1px; margin: .6rem auto 0; background: #c87554; }
 @media (max-width: 620px) { .navbar { padding-inline: 1.5rem; } nav { gap: .8rem; } main { width: min(100% - 2rem, 940px); padding-top: 2.5rem; }.recipe-grid { grid-template-columns: 1fr; gap: 1.5rem; }.recipe-card img { height: 220px; } }
+.card-author { margin: -.25rem 0 .7rem; }
 </style>

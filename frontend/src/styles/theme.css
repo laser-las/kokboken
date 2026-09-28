@@ -1,0 +1,58 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg: #faf7f2; --ink: #2b211c; --muted: #7d6f68; --line: #ede3da;
+  --accent: #c4623f; --accent-dark: #a94e2f; --accent-soft: #fbeee7; --radius: 16px;
+  --shadow-sm: 0 1px 2px rgba(60,35,20,.06), 0 4px 14px rgba(60,35,20,.06);
+  --shadow-md: 0 2px 4px rgba(60,35,20,.06), 0 14px 34px rgba(60,35,20,.14);
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+}
+html { font-size: 112.5%; scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--bg); color: var(--ink); }
+::selection { background: var(--accent-soft); color: var(--accent-dark); }
+html body #app { max-width: none; margin: 0; padding: 0; display: block; }
+
+/* Typografi */
+#app * { font-family: var(--font-body); }
+#app h1, #app h2, #app h3, #app .logo, #app .brand, #app .hero-quote, #app .form-title, #app footer span { font-family: var(--font-display); letter-spacing: -.01em; }
+#app .eyebrow { color: var(--accent); letter-spacing: .14em; }
+#app .page-container { background: var(--bg); }
+
+/* Navbar */
+#app .navbar { position: sticky; top: 0; z-index: 40; background: rgba(255,253,250,.82); backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid var(--line); }
+#app .navbar nav > a { font-weight: 500; color: var(--muted); transition: color .15s; }
+#app .navbar nav > a:hover, #app .navbar nav > a.router-link-active { color: var(--accent); }
+#app .btn-outline { border-radius: 999px; font-weight: 500; }
+#app .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Knappar */
+#app button, #app .btn-outline, #app .edit-link, #app .delete-link, #app .add-row { transition: background-color .18s, color .18s, border-color .18s, box-shadow .18s, transform .18s; }
+#app button:not(:disabled):active { transform: scale(.97); }
+#app .btn-primary, #app .new-recipe, #app .edit-actions .save, #app .add-category button { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; box-shadow: 0 6px 16px rgba(196,98,63,.28); }
+#app .btn-primary:hover:not(:disabled), #app .new-recipe:hover, #app .edit-actions .save:hover { background: var(--accent-dark); box-shadow: 0 8px 22px rgba(196,98,63,.36); transform: translateY(-1px); }
+#app .new-recipe, #app .btn-primary { border-radius: 999px; }
+#app button:focus-visible, #app a:focus-visible { outline: 3px solid rgba(196,98,63,.35); outline-offset: 2px; }
+
+/* Kort och paneler */
+#app .recipe-card { border-radius: var(--radius); border: 1px solid var(--line); box-shadow: var(--shadow-sm); overflow: hidden; }
+#app .recipe-card:hover { box-shadow: var(--shadow-md); transform: translateY(-4px); }
+#app .recipe-card img { transition: transform .5s ease; }
+#app .recipe-card:hover img { transform: scale(1.05); }
+#app .recipe-card h2, #app .recipe-card h3 { font-style: normal; font-weight: 600; }
+#app .recipe-form, #app .contact-form, #app .edit-panel, #app .ingredients, #app .instructions, #app .panel, #app .metrics div, #app .stats div { border-radius: var(--radius); border-color: var(--line); box-shadow: var(--shadow-sm); }
+#app .hero-image { border-radius: 20px; box-shadow: var(--shadow-md); }
+#app footer { background: #f3ebe2; border-top: 1px solid var(--line); }
+
+/* Formulär */
+#app input:not([type=checkbox]):not([type=radio]):not([type=file]), #app textarea { border-radius: 12px; transition: border-color .15s, box-shadow .15s; }
+#app input:focus, #app textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(196,98,63,.14); outline: none; }
+#app .search-box { border-radius: 999px; box-shadow: var(--shadow-sm); border-color: var(--line); }
+#app .search-box input:focus { box-shadow: none; }
+#app .category-list button { padding: .5rem 1rem; font-weight: 500; }
+#app .category-list button:not(.active):hover { border-color: var(--accent); color: var(--accent); }
+
+/* Rörelse */
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+#app main { animation: rise .4s ease both; }
+@media (prefers-reduced-motion: reduce) { #app *, #app *::before, #app *::after { animation: none !important; transition: none !important; } html { scroll-behavior: auto; } }

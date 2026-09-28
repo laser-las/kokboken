@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.database import recipes_collection
+from app.database import recipes_collection, users_collection
 from app.routers.auth import current_user, optional_user
 
 router = APIRouter(prefix="/api/recipes", tags=["Recipes"])
@@ -29,8 +29,16 @@ def slugify(title: str) -> str:
     return slug.strip("-") or "recept"
 
 
-def serialize(doc: dict) -> dict:
+async def author_names(docs: list) -> dict:
+    emails = list({d.get("created_by") for d in docs if d.get("created_by")})
+    users = await users_collection.find({"email": {"$in": emails}}).to_list(length=1000)
+    return {u["email"]: (u.get("name") or u["email"].split("@")[0]) for u in users}
+
+
+def serialize(doc: dict, names: Optional[dict] = None) -> dict:
+    owner = doc.get("created_by", "") or ""
     return {
+        "authorName": (names or {}).get(owner) or owner.split("@")[0],
         "slug": doc["slug"],
         "title": doc["title"],
         "category": doc.get("category", ""),
@@ -59,14 +67,16 @@ async def get_recipes():
     # missar ett privat recept oavsett exakt hur fältet råkar vara lagrat.
     docs = await recipes_collection.find({}).sort("_id", -1).to_list(length=500)
     public_docs = [d for d in docs if d.get("is_public", True) is not False]
-    return [serialize(d) for d in public_docs]
+    names = await author_names(public_docs)
+    return [serialize(d, names) for d in public_docs]
 
 
 @router.get("/mine")
 async def get_my_recipes(user: dict = Depends(current_user)):
     # Egna recept, både publika och privata
     docs = await recipes_collection.find({"created_by": user["email"]}).sort("_id", -1).to_list(length=500)
-    return [serialize(d) for d in docs]
+    names = await author_names(docs)
+    return [serialize(d, names) for d in docs]
 
 
 @router.get("/{slug}")
@@ -76,7 +86,7 @@ async def get_recipe(slug: str, user: Optional[dict] = Depends(optional_user)):
         raise HTTPException(status_code=404, detail="Receptet hittades inte.")
     if not can_view(doc, user):
         raise HTTPException(status_code=403, detail="Det här receptet är privat.")
-    return serialize(doc)
+    return serialize(doc, await author_names([doc]))
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)

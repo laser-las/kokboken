@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 
-from backend.app.database import contact_collection
+from app.database import contact_collection
 
 router = APIRouter(prefix="/api/contact", tags=["Contact"])
 

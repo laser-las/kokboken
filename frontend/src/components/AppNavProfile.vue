@@ -1,24 +1,17 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { api } from '@/lib/api'
+import { computed, onMounted, ref } from 'vue'
 import { useAuth } from '@/composables/useAuth'
+import { useProfile } from '@/composables/useProfile'
 
 const { logout } = useAuth()
-const isAdmin = localStorage.getItem('userRole') === 'admin'
-const name = ref('')
-const avatarUrl = ref<string | null>(null)
+const { profile, loadProfile } = useProfile()
+const isAdmin = sessionStorage.getItem('userRole') === 'admin'
+const name = computed(() => profile.value.name)
+const avatarUrl = computed(() => profile.value.avatar_url)
 const isOpen = ref(false)
 let closeTimer: number | undefined
 
-onMounted(async () => {
-  try {
-    const response = await api.get('/auth/me')
-    name.value = response.data.name
-    avatarUrl.value = response.data.avatar_url
-  } catch {
-    // Inte inloggad eller kunde inte hämta profilen - visa tomt fallback
-  }
-})
+onMounted(loadProfile)
 
 function open() {
   window.clearTimeout(closeTimer)

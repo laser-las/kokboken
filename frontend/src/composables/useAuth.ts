@@ -4,9 +4,9 @@ import { refreshFavorites } from './useFavorites'
 export function useAuth() {
   const router = useRouter()
   const logout = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('userEmail')
-    localStorage.removeItem('userRole')
+    sessionStorage.removeItem('token')
+    sessionStorage.removeItem('userEmail')
+    sessionStorage.removeItem('userRole')
     refreshFavorites()
     router.push('/login')
   }

@@ -1,9 +1,16 @@
+<script setup lang="ts"></script>
+
 <template>
-  <router-link to="/recipes" class="app-logo" aria-label="Köksboken">
-    <span class="book-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M16 9c-3.8-3-8-2.1-10-1v15c2.7-1.3 6.7-1.2 10 1 3.3-2.2 7.3-2.3 10-1V8c-2-1.1-6.2-2-10 1Z"/><path d="M16 9v15"/></svg></span>
-    <span>Köksboken</span>
+  <router-link to="/recipes" class="app-logo logo" aria-label="Köksboken, till startsidan">
+    <span class="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 6.5C10.5 5.3 8.3 4.8 5 5v12c3.3-.2 5.5.3 7 1.5 1.5-1.2 3.7-1.7 7-1.5V5c-3.3-.2-5.5.3-7 1.5z" /><path d="M12 6.5v12" /></svg>
+    </span>Köksboken
   </router-link>
 </template>
+
 <style scoped>
-.app-logo{display:flex;align-items:center;gap:14px;color:#312622;font:italic 700 clamp(1.25rem,2vw,2rem) Georgia,'Times New Roman',serif;text-decoration:none;letter-spacing:-.035em}.book-icon{display:grid;place-items:center;width:58px;height:58px;border-radius:15px;background:#cd7b55}.book-icon svg{width:33px;height:33px;fill:none;stroke:white;stroke-width:2.15;stroke-linejoin:round;stroke-linecap:round}@media(max-width:640px){.app-logo{gap:8px;font-size:1.3rem}.book-icon{width:38px;height:38px;border-radius:10px}.book-icon svg{width:24px;height:24px}}
+.app-logo { display: inline-flex; align-items: center; gap: .65rem; flex-shrink: 0; color: #9d5138; font-size: 1.3rem; font-style: italic; font-weight: 700; text-decoration: none; }
+.mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: linear-gradient(135deg, #d47a55, #b8532f); box-shadow: 0 4px 10px rgba(196, 98, 63, .3); transition: transform .2s; }
+.app-logo:hover .mark { transform: rotate(-6deg) scale(1.05); }
+svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 </style>

@@ -27,10 +27,10 @@ const handleRegister = async () => {
     })
 
     if (response.data.access_token) {
-      localStorage.setItem('token', response.data.access_token)
+      sessionStorage.setItem('token', response.data.access_token)
     }
     if (response.data.email) {
-      localStorage.setItem('userEmail', response.data.email)
+      sessionStorage.setItem('userEmail', response.data.email)
     }
 
     router.push('/login')

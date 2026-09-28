@@ -1,9 +1,12 @@
 import os
+import base64
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import bcrypt
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr
 from app.database import users_collection
@@ -123,6 +126,28 @@ async def google_login(login: GoogleLogin):
         "avatar_url": existing.get("avatar_url"),
     }
 
+@router.get("/avatar/{email}")
+async def get_avatar(email: str, request: Request):
+    # Öppen endpoint så att alla besökare kan se en användares profilbild
+    u = await users_collection.find_one({"email": email.lower()})
+    data = (u or {}).get("avatar_url") or ""
+    if data.startswith("http"):
+        return RedirectResponse(data)
+    if not data.startswith("data:") or "," not in data:
+        raise HTTPException(status_code=404, detail="Ingen profilbild.")
+    header, b64 = data.split(",", 1)
+    mime = header[5:].split(";")[0] or "image/jpeg"
+    try:
+        raw = base64.b64decode(b64)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Ogiltig profilbild.")
+    # ETag + no-cache: webbläsaren kollar alltid om bilden ändrats (nytt val syns direkt)
+    etag = '"' + hashlib.md5(raw).hexdigest() + '"'
+    headers = {"ETag": etag, "Cache-Control": "no-cache"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(content=raw, media_type=mime, headers=headers)
+
 @router.get("/me")
 async def get_me(user: dict = Depends(current_user)):
     return public_profile(user)
@@ -130,6 +155,12 @@ async def get_me(user: dict = Depends(current_user)):
 @router.patch("/me")
 async def update_me(update: ProfileUpdate, user: dict = Depends(current_user)):
     changes = {k: v for k, v in update.model_dump().items() if v is not None}
+    if "name" in changes:
+        changes["name"] = changes["name"].strip()[:40]
+        if not changes["name"]:
+            raise HTTPException(status_code=400, detail="Namnet får inte vara tomt.")
+    if len(changes.get("avatar_url", "")) > 1_500_000:
+        raise HTTPException(status_code=400, detail="Profilbilden är för stor.")
     if changes:
         await users_collection.update_one({"_id": user["_id"]}, {"$set": changes})
     updated = await users_collection.find_one({"_id": user["_id"]})
