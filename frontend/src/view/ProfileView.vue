@@ -48,6 +48,10 @@ onMounted(() => {
 })
 
 function goToNewRecipe() { router.push('/recipes/new') }
+function selectCollection(tab: 'favorites' | 'mine') {
+  activeTab.value = tab
+  window.scrollTo({ top: 0, behavior: 'auto' })
+}
 
 async function loadTwoFactorStatus() {
   try { twoFactorEnabled.value = (await api.get('/auth/2fa/status')).data.enabled } catch { twoFactorEnabled.value = false }
@@ -135,12 +139,12 @@ async function confirmTwoFactorSetup() {
       <div class="layout">
         <aside>
           <h2>Min samling</h2>
-          <button class="menu-item" :class="{ active: activeTab === 'favorites' }" @click="activeTab = 'favorites'">♡ Favoritrecept <span>{{ favoriteRecipes.length }}</span></button>
-          <button class="menu-item" :class="{ active: activeTab === 'mine' }" @click="activeTab = 'mine'">✎ Mina recept <span>{{ myRecipes.length }}</span></button>
+          <button class="menu-item" :class="{ active: activeTab === 'favorites' }" @click="selectCollection('favorites')">♡ Favoritrecept <span>{{ favoriteRecipes.length }}</span></button>
+          <button class="menu-item" :class="{ active: activeTab === 'mine' }" @click="selectCollection('mine')">✎ Mina recept <span>{{ myRecipes.length }}</span></button>
           <div class="tip"><strong>MIN KÖKSBOK</strong><p>Dina sparade recept syns här. Klicka på hjärtat för att lägga till eller ta bort en favorit.</p></div>
         </aside>
 
-        <section v-if="activeTab === 'favorites'" class="favorites">
+        <section v-if="activeTab === 'favorites'" :key="activeTab" class="favorites">
           <div class="section-top"><div><p class="eyebrow">DIN SAMLING</p><h2>Sparade favoriter</h2></div><router-link to="/recipes">Visa alla recept →</router-link></div>
           <div v-if="favoriteRecipes.length" class="recipe-grid">
             <article v-for="recipe in favoriteRecipes" :key="recipe.slug" class="recipe-card">
@@ -151,7 +155,7 @@ async function confirmTwoFactorSetup() {
           <div v-else class="empty"><span>♡</span><h3>Inga favoriter ännu</h3><p>Utforska recept och tryck på hjärtat för att spara dem här.</p><router-link to="/recipes">Utforska recept</router-link></div>
         </section>
 
-        <section v-else class="favorites">
+        <section v-else :key="activeTab" class="favorites">
           <div class="section-top"><div><p class="eyebrow">DINA SKAPELSER</p><h2>Mina recept</h2></div><button class="new-recipe small" type="button" @click="goToNewRecipe">+ Nytt recept</button></div>
           <div v-if="myRecipes.length" class="recipe-grid">
             <article v-for="recipe in myRecipes" :key="recipe.slug" class="recipe-card">

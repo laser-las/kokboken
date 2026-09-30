@@ -163,7 +163,7 @@ const resendCode = async () => {
                 <label>E-postadress</label>
                 <div class="input-wrapper">
                   <span class="input-icon">✉</span>
-                  <input type="email" v-model="email" placeholder="exempel@koksboken.se" autocomplete="email" required />
+                  <input type="email" v-model="email" placeholder="exempel@köksboken.se" autocomplete="email" required />
                 </div>
               </div>
 

@@ -144,6 +144,31 @@ function removeImage() {
   image.value = ''
   if (imageInput.value) imageInput.value.value = ''
 }
+function adjustRecipeImage(rotation: number, zoom = 1, moveX = 0, moveY = 0) {
+  if (!image.value) return
+  isProcessingImage.value = true
+  const source = image.value
+  const img = new Image()
+  img.onload = () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = img.width
+    canvas.height = img.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) { isProcessingImage.value = false; return }
+    const isQuarterTurn = Math.abs(rotation) % 180 === 90
+    const coverScale = isQuarterTurn ? Math.max(canvas.width / img.height, canvas.height / img.width) : 1
+    const scale = coverScale * zoom
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.translate(canvas.width / 2 + moveX, canvas.height / 2 + moveY)
+    ctx.rotate((rotation * Math.PI) / 180)
+    ctx.drawImage(img, -(img.width * scale) / 2, -(img.height * scale) / 2, img.width * scale, img.height * scale)
+    image.value = canvas.toDataURL('image/jpeg', 0.85)
+    isProcessingImage.value = false
+  }
+  img.onerror = () => { errorMessage.value = 'Kunde inte justera bilden.'; isProcessingImage.value = false }
+  img.src = source
+}
 
 async function save() {
   errorMessage.value = ''
@@ -201,9 +226,10 @@ async function save() {
         <label>Titel<input v-model="title" type="text" required placeholder="T.ex. Köttbullar med potatismos" /></label>
 
         <div class="row">
-          <label>Kategori
+          <div class="form-field">
+            <span class="field-label">Kategori</span>
             <SelectDropdown v-model="category" :options="categories" placeholder="Välj kategori" />
-          </label>
+          </div>
           <fieldset class="duration-fields">
             <legend>Tid</legend>
             <div>
@@ -229,21 +255,26 @@ async function save() {
           </label>
         </div>
 
-        <label>Bild
+        <div class="form-field">
+          <span class="field-label">Bild</span>
           <div class="image-uploader">
-            <div class="preview" :class="{ empty: !image }">
+            <button type="button" class="preview" :class="{ empty: !image }" aria-label="Välj receptbild" @click="imageInput?.click()">
               <img v-if="image" :src="image" alt="Förhandsvisning av receptbilden" />
               <span v-else-if="isProcessingImage">Bearbetar bild...</span>
               <span v-else>Ingen bild vald</span>
-            </div>
+            </button>
             <div class="image-actions">
               <input ref="imageInput" type="file" accept="image/*" hidden @change="onImageSelected" />
               <button type="button" class="pick-image" @click="imageInput?.click()">{{ image ? 'Byt bild' : 'Välj bild' }}</button>
+              <div v-if="image" class="image-adjustments" aria-label="Justera receptbild">
+                <button type="button" @click="adjustRecipeImage(-90)">↺ Rotera</button><button type="button" @click="adjustRecipeImage(90)">Rotera ↻</button><button type="button" @click="adjustRecipeImage(0, 1.15)">+ Zooma</button><button type="button" @click="adjustRecipeImage(0, .85)">− Zooma</button>
+                <button type="button" @click="adjustRecipeImage(0, 1, -35)">← Flytta</button><button type="button" @click="adjustRecipeImage(0, 1, 35)">Flytta →</button><button type="button" @click="adjustRecipeImage(0, 1, 0, -25)">↑ Flytta</button><button type="button" @click="adjustRecipeImage(0, 1, 0, 25)">↓ Flytta</button>
+              </div>
               <button v-if="image" type="button" class="remove-image" @click="removeImage">Ta bort bild</button>
-              <small class="hint">JPG eller PNG. Bilden komprimeras automatiskt.</small>
+              <small class="hint">JPG eller PNG. Bilden komprimeras automatiskt och kan justeras före sparning.</small>
             </div>
           </div>
-        </label>
+        </div>
 
         <label>Beskrivning<textarea v-model="description" rows="3" placeholder="Kort presentation av receptet"></textarea></label>
 
@@ -304,7 +335,8 @@ main { width: min(760px, calc(100% - 3rem)); margin: 0 auto; padding: 2rem 0 4re
 .back-link { display: inline-block; margin-bottom: 1.5rem; color: #b46649; font: .73rem Arial, sans-serif; text-decoration: none; }
 h1 { margin: 0 0 1.5rem; font-size: 2rem; }
 .recipe-form { display: flex; flex-direction: column; gap: 1.1rem; background: white; border: 1px solid #eee5de; border-radius: 10px; padding: 1.75rem; }
-.recipe-form > label { display: flex; flex-direction: column; gap: .4rem; font: 600 .78rem Arial, sans-serif; color: #443e39; }
+.recipe-form > label, .form-field { display: flex; flex-direction: column; gap: .4rem; font: 600 .78rem Arial, sans-serif; color: #443e39; }
+.field-label { display: block; }
 .recipe-form input[type="text"], .recipe-form textarea { border: 1px solid #e2ddd5; border-radius: 8px; padding: .65rem .8rem; font: .85rem Arial, sans-serif; outline: none; resize: vertical; width: 100%; box-sizing: border-box; }
 .recipe-form input:focus, .recipe-form textarea:focus { border-color: #c87a57; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
@@ -324,10 +356,12 @@ h1 { margin: 0 0 1.5rem; font-size: 2rem; }
 .stepper button:hover { border-color: #c4623f; color: #c4623f; }
 .stepper span { min-width: 1.5rem; text-align: center; font: 600 .95rem Arial, sans-serif; }
 .image-uploader { display: flex; gap: 1rem; align-items: center; }
-.preview { width: 140px; height: 100px; flex-shrink: 0; border-radius: 8px; border: 1px dashed #dfd2c8; display: grid; place-items: center; overflow: hidden; background: #faf5f0; }
+.preview { width: 140px; height: 100px; flex-shrink: 0; padding: 0; border-radius: 8px; border: 1px dashed #dfd2c8; display: grid; place-items: center; overflow: hidden; background: #faf5f0; cursor: pointer; }
+.preview:hover { border-color: #c4623f; background: #fffaf6; }
 .preview img { width: 100%; height: 100%; object-fit: cover; }
 .preview.empty span { color: #b3a49a; font: .65rem Arial, sans-serif; text-align: center; padding: 0 .5rem; }
 .image-actions { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; }
+.image-adjustments { display: flex; flex-wrap: wrap; gap: .35rem; }.image-adjustments button { border: 1px solid #e3d6cb; border-radius: 7px; background: #fffdfb; padding: .35rem .5rem; color: #6e5f57; font: .68rem Arial, sans-serif; cursor: pointer; }.image-adjustments button:hover { border-color: #c4623f; color: #c4623f; }
 .pick-image { padding: .55rem 1.1rem; border: 1px solid #e3d6cb; border-radius: 999px; background: #fff; color: #4a3d36; font: 600 .82rem Arial, sans-serif; cursor: pointer; }
 .pick-image:hover { border-color: #c4623f; color: #c4623f; background: #fffaf6; }
 .remove-image { border: 1px solid #e9ddd5; border-radius: 6px; background: white; padding: .35rem .6rem; font: .68rem Arial, sans-serif; color: #b3453a; cursor: pointer; }

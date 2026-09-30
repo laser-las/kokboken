@@ -56,6 +56,7 @@ const filteredRecipes = computed(() => {
     return matchesCategory && recipe.title.toLowerCase().includes(query)
   })
 })
+const filterKey = computed(() => `${selectedCategory.value}:${search.value.trim().toLowerCase()}`)
 
 function createRecipe() {
   if (!isLoggedIn) {
@@ -67,7 +68,7 @@ function createRecipe() {
 async function selectCategory(category: string) {
   selectedCategory.value = category
   await nextTick()
-  recipeResults.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  window.scrollTo({ top: 0, behavior: 'auto' })
 }
 </script>
 
@@ -113,10 +114,10 @@ async function selectCategory(category: string) {
       <p v-if="isLoading" class="empty-state">Laddar recept...</p>
       <p v-else-if="loadError" class="empty-state">{{ loadError }}</p>
       <div v-else ref="recipeResults">
-      <transition-group name="card-fade" tag="section" class="recipe-grid" aria-label="Recept">
+      <transition-group :key="filterKey" name="card-fade" tag="section" class="recipe-grid" aria-label="Recept">
         <article v-for="recipe in filteredRecipes" :key="recipe.slug" class="recipe-card">
           <router-link :to="`/recipes/${recipe.slug}`" class="recipe-link">
-            <img :src="recipe.image || 'https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=900&q=85'" :alt="recipe.title" />
+            <img :key="`${filterKey}-${recipe.slug}`" :src="recipe.image || 'https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=900&q=85'" :alt="recipe.title" />
             <div class="recipe-details">
               <h2>{{ recipe.title }}</h2>
               <AuthorChip class="card-author" :email="recipe.createdBy" :name="recipe.authorName" />

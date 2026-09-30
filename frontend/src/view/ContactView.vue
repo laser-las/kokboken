@@ -19,6 +19,7 @@ const chatMessage = ref('')
 const chatError = ref('')
 const isSendingChat = ref(false)
 const onlineAdmins = ref(0)
+const chatStatus = ref<'open' | 'archived'>('open')
 let chatTimer: number | undefined
 
 async function loadChat() {
@@ -26,6 +27,7 @@ async function loadChat() {
   try {
     const [chat, availability] = await Promise.all([api.get('/chat/mine'), api.get('/auth/chat/admins-online')])
     chatMessages.value = chat.data.messages
+    chatStatus.value = chat.data.status || 'open'
     onlineAdmins.value = availability.data.count
   }
   catch { chatError.value = 'Kunde inte ladda chatten just nu.' }
@@ -114,6 +116,7 @@ async function submit() {
       <section v-if="isLoggedIn" class="chat-panel">
         <div class="chat-head"><div><p class="eyebrow">LIVECHATT</p><h2>Prata med en administratör</h2></div><span :class="{ offline: !onlineAdmins }">● {{ onlineAdmins ? `${onlineAdmins} admin${onlineAdmins === 1 ? '' : 's'} aktiv${onlineAdmins === 1 ? '' : 'a'}` : 'Ingen admin aktiv just nu' }}</span></div>
         <p v-if="chatError" class="error-banner">{{ chatError }}</p>
+        <p v-if="chatStatus === 'archived'" class="chat-closed">Den här chatten är avslutad. Kontakta oss via formuläret ovan om du behöver mer hjälp.</p>
         <div class="chat-messages" aria-live="polite">
           <p v-if="!chatMessages.length" class="chat-empty">Starta en privat konversation med vårt team.</p>
           <div v-for="item in chatMessages" :key="item.id" class="chat-bubble" :class="item.sender">
@@ -121,7 +124,7 @@ async function submit() {
             <p>{{ item.message }}</p>
           </div>
         </div>
-        <form class="chat-compose" @submit.prevent="sendChat"><textarea v-model="chatMessage" rows="2" maxlength="2000" placeholder="Skriv ett meddelande till administratören..."></textarea><button type="submit" class="btn-primary" :disabled="isSendingChat || !chatMessage.trim()">{{ isSendingChat ? 'Skickar...' : 'Skicka' }}</button></form>
+        <form v-if="chatStatus !== 'archived'" class="chat-compose" @submit.prevent="sendChat"><textarea v-model="chatMessage" rows="2" maxlength="2000" placeholder="Skriv ett meddelande till administratören..."></textarea><button type="submit" class="btn-primary" :disabled="isSendingChat || !chatMessage.trim()">{{ isSendingChat ? 'Skickar...' : 'Skicka' }}</button></form>
       </section>
     </main>
     <footer><span>Smaklig måltid!</span></footer>
@@ -150,6 +153,7 @@ h1 { margin: 0; font-size: clamp(1.9rem, 4vw, 2.6rem); }
 .error-banner { background-color: #fde8e8; color: #9b1c1c; padding: .75rem; border-radius: 8px; font-size: .85rem; }
 .success-banner { background-color: #e8f5ea; color: #2a6b39; padding: 1rem; border-radius: 8px; font-size: .9rem; }
 .chat-panel { margin-top: 1.5rem; border: 1px solid #eaded5; border-radius: 16px; background: #fffdfa; padding: 1rem; text-align: left; box-shadow: 0 8px 24px rgba(60,35,20,.06); }
+.chat-closed { margin: .85rem 0 0; border-radius: 8px; background: #f3eee9; padding: .7rem; color: #786a63; font: .75rem Arial, sans-serif; }
 .chat-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding: .2rem .2rem .85rem; border-bottom: 1px solid #eee3dc; }.chat-head .eyebrow { margin-bottom: .25rem; }.chat-head h2 { margin: 0; font-size: 1.05rem; }.chat-head span { color: #52835d; font: .67rem Arial, sans-serif; }.chat-head span.offline { color: #9a7c6d; }
 .chat-messages { display: flex; flex-direction: column; gap: .55rem; min-height: 120px; max-height: 300px; overflow-y: auto; padding: .9rem .2rem; }.chat-empty { margin: auto; color: #978881; font: .76rem Arial, sans-serif; text-align: center; }.chat-bubble { max-width: 78%; padding: .6rem .75rem; border-radius: 12px; background: #f2ede8; color: #493d37; }.chat-bubble.user { align-self: flex-end; background: #c4623f; color: #fff; border-bottom-right-radius: 3px; }.chat-bubble.admin { align-self: flex-start; border-bottom-left-radius: 3px; }.chat-bubble small { display: block; margin-bottom: .2rem; opacity: .72; font: .61rem Arial, sans-serif; }.chat-bubble p { margin: 0; white-space: pre-wrap; font: .77rem/1.45 Arial, sans-serif; }.chat-compose { display: flex; gap: .6rem; align-items: flex-end; border-top: 1px solid #eee3dc; padding-top: .85rem; }.chat-compose textarea { flex: 1; border: 1px solid #dfd3ca; border-radius: 10px; padding: .6rem .7rem; resize: vertical; font: .78rem Arial, sans-serif; }.chat-compose .btn-primary { padding: .65rem .95rem; font-size: .75rem; }
 .fade-enter-active, .fade-leave-active { transition: opacity .18s ease; } .fade-enter-from, .fade-leave-to { opacity: 0; }

@@ -37,6 +37,7 @@ async def get_or_create_conversation(user: dict) -> dict:
         "last_sender": "",
         "unread_for_admin": 0,
         "unread_for_user": 0,
+        "status": "open",
     })
     return await chat_conversations_collection.find_one({"_id": result.inserted_id})
 
@@ -56,12 +57,14 @@ async def get_my_chat(user: dict = Depends(current_user)):
     conversation = await get_or_create_conversation(user)
     messages = await chat_messages_collection.find({"conversation_id": conversation["_id"]}).sort("created_at", 1).to_list(length=300)
     await chat_conversations_collection.update_one({"_id": conversation["_id"]}, {"$set": {"unread_for_user": 0}})
-    return {"conversationId": str(conversation["_id"]), "messages": [serialize_message(message) for message in messages]}
+    return {"conversationId": str(conversation["_id"]), "status": conversation.get("status", "open"), "messages": [serialize_message(message) for message in messages]}
 
 
 @router.post("/mine/messages", status_code=status.HTTP_201_CREATED)
 async def send_my_message(payload: MessageCreate, user: dict = Depends(current_user)):
     conversation = await get_or_create_conversation(user)
+    if conversation.get("status") == "archived":
+        raise HTTPException(status_code=409, detail="Chatten är avslutad. Kontakta oss via kontaktformuläret om du behöver mer hjälp.")
     now = datetime.now(timezone.utc)
     message = clean_message(payload.message)
     result = await chat_messages_collection.insert_one({
@@ -73,14 +76,25 @@ async def send_my_message(payload: MessageCreate, user: dict = Depends(current_u
     return serialize_message(created)
 
 
-@router.get("/admin/conversations")
-async def list_conversations(_: dict = Depends(require_admin)):
-    conversations = await chat_conversations_collection.find({}).sort("updated_at", -1).to_list(length=300)
-    return [{
+def serialize_conversation(item: dict) -> dict:
+    return {
         "id": str(item["_id"]), "userEmail": item["user_email"], "userName": item.get("user_name") or item["user_email"].split("@")[0],
         "lastMessage": item.get("last_message", ""), "lastSender": item.get("last_sender", ""),
         "updatedAt": item.get("updated_at"), "unreadForAdmin": item.get("unread_for_admin", 0),
-    } for item in conversations]
+        "status": item.get("status", "open"), "closedAt": item.get("closed_at"),
+    }
+
+
+@router.get("/admin/conversations")
+async def list_conversations(_: dict = Depends(require_admin)):
+    conversations = await chat_conversations_collection.find({"status": {"$ne": "archived"}}).sort("updated_at", -1).to_list(length=300)
+    return [serialize_conversation(item) for item in conversations]
+
+
+@router.get("/admin/conversations/archive")
+async def list_archived_conversations(_: dict = Depends(require_admin)):
+    conversations = await chat_conversations_collection.find({"status": "archived"}).sort("closed_at", -1).to_list(length=300)
+    return [serialize_conversation(item) for item in conversations]
 
 
 @router.get("/admin/conversations/{conversation_id}")
@@ -102,6 +116,8 @@ async def send_admin_message(conversation_id: str, payload: MessageCreate, admin
     conversation = await chat_conversations_collection.find_one({"_id": ObjectId(conversation_id)})
     if not conversation:
         raise HTTPException(status_code=404, detail="Konversationen hittades inte.")
+    if conversation.get("status") == "archived":
+        raise HTTPException(status_code=409, detail="Konversationen är avslutad och kan inte besvaras.")
     now = datetime.now(timezone.utc)
     message = clean_message(payload.message)
     result = await chat_messages_collection.insert_one({
@@ -111,3 +127,20 @@ async def send_admin_message(conversation_id: str, payload: MessageCreate, admin
     await chat_conversations_collection.update_one({"_id": conversation["_id"]}, {"$set": {"updated_at": now, "last_message": message, "last_sender": "admin"}, "$inc": {"unread_for_user": 1}})
     created = await chat_messages_collection.find_one({"_id": result.inserted_id})
     return serialize_message(created)
+
+
+@router.post("/admin/conversations/{conversation_id}/close")
+async def close_conversation(conversation_id: str, _: dict = Depends(require_admin)):
+    if not ObjectId.is_valid(conversation_id):
+        raise HTTPException(status_code=404, detail="Konversationen hittades inte.")
+    conversation = await chat_conversations_collection.find_one({"_id": ObjectId(conversation_id)})
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Konversationen hittades inte.")
+    if conversation.get("status") == "archived":
+        return {"status": "archived", "closedAt": conversation.get("closed_at")}
+    now = datetime.now(timezone.utc)
+    await chat_conversations_collection.update_one(
+        {"_id": conversation["_id"]},
+        {"$set": {"status": "archived", "closed_at": now, "unread_for_admin": 0, "unread_for_user": 0}},
+    )
+    return {"status": "archived", "closedAt": now}

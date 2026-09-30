@@ -61,6 +61,28 @@ function onFile(event: Event) {
   reader.readAsDataURL(file)
 }
 function removeAvatar() { avatar.value = null; avatarChanged.value = true }
+function adjustAvatar(rotation: number, zoom = 1, moveX = 0, moveY = 0) {
+  if (!avatar.value) return
+  const source = avatar.value
+  const img = new Image()
+  img.onload = () => {
+    const canvas = document.createElement('canvas')
+    const size = 256
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, size, size)
+    ctx.translate(size / 2 + moveX, size / 2 + moveY)
+    ctx.rotate((rotation * Math.PI) / 180)
+    const scaled = size * zoom
+    ctx.drawImage(img, -scaled / 2, -scaled / 2, scaled, scaled)
+    avatar.value = canvas.toDataURL('image/jpeg', 0.88)
+    avatarChanged.value = true
+  }
+  img.src = source
+}
 
 async function save() {
   if (!canSave.value) return
@@ -99,8 +121,13 @@ async function save() {
             </button>
             <div class="avatar-side">
               <button type="button" class="ghost" @click="fileInput?.click()">{{ avatar ? 'Byt bild' : 'Ladda upp bild' }}</button>
+              <div v-if="avatar" class="image-adjustments" aria-label="Justera profilbild">
+                <button type="button" @click="adjustAvatar(-90)">↺ Rotera</button><button type="button" @click="adjustAvatar(90)">Rotera ↻</button>
+                <button type="button" @click="adjustAvatar(0, 1.15)">+ Zooma</button><button type="button" @click="adjustAvatar(0, .85)">− Zooma</button>
+                <button type="button" @click="adjustAvatar(0, 1, -18)">← Flytta</button><button type="button" @click="adjustAvatar(0, 1, 18)">Flytta →</button><button type="button" @click="adjustAvatar(0, 1, 0, -18)">↑ Flytta</button><button type="button" @click="adjustAvatar(0, 1, 0, 18)">↓ Flytta</button>
+              </div>
               <button v-if="avatar" type="button" class="link" @click="removeAvatar">Ta bort bild</button>
-              <p>JPG eller PNG. Bilden beskärs till en kvadrat.</p>
+              <p>JPG eller PNG. Bilden beskärs till en kvadrat och kan justeras före sparning.</p>
             </div>
             <input ref="fileInput" type="file" accept="image/*" hidden @change="onFile" />
           </div>
@@ -137,6 +164,7 @@ h2 { margin: 0; font: 700 1.35rem 'Fraunces', Georgia, serif; letter-spacing: -.
 .avatar em { position: absolute; inset: auto 0 0; padding: .3rem 0 .4rem; background: linear-gradient(transparent, rgba(0, 0, 0, .6)); color: #fff; font-size: .68rem; font-style: normal; font-weight: 600; opacity: 0; transform: translateY(6px); transition: opacity .18s, transform .18s; }
 .avatar:hover em, .avatar:focus-visible em { opacity: 1; transform: none; }
 .avatar-side { display: grid; gap: .55rem; justify-items: start; }
+.image-adjustments { display: flex; flex-wrap: wrap; gap: .35rem; }.image-adjustments button { border: 1px solid #e3d6cb; border-radius: 7px; background: #fffdfb; padding: .35rem .5rem; color: #6e5f57; font-size: .68rem; cursor: pointer; }.image-adjustments button:hover { border-color: #c4623f; color: #c4623f; }
 .avatar-side p { margin: 0; color: #9a8c84; font-size: .72rem; line-height: 1.4; }
 .ghost { padding: .55rem 1rem; border: 1px solid #e3d6cb; border-radius: 999px; background: #fff; color: #4a3d36; font-size: .82rem; font-weight: 600; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
 .ghost:hover { border-color: #c4623f; color: #c4623f; background: #fffaf6; }

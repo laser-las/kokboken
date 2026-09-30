@@ -147,7 +147,7 @@ const finishRegistration = () => router.push('/recipes')
                 <input
                   type="email"
                   v-model="email"
-                  placeholder="exempel@koksboken.se"
+                  placeholder="exempel@köksboken.se"
                   required
                 />
               </div>

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from bson import ObjectId
 from pydantic import BaseModel, EmailStr
 
 from app.database import contact_collection
@@ -59,8 +60,30 @@ async def send_contact_message(payload: ContactMessage, request: Request, user: 
 
 @router.get("/admin")
 async def list_contact_messages(_: dict = Depends(require_admin)):
-    messages = await contact_collection.find({}).sort("created_at", -1).to_list(length=300)
+    messages = await contact_collection.find({"archived": {"$ne": True}}).sort("created_at", -1).to_list(length=300)
     return [{
         "id": str(item["_id"]), "name": item["name"], "email": item["email"],
         "message": item["message"], "createdAt": item["created_at"],
     } for item in messages]
+
+
+@router.get("/admin/archive")
+async def list_archived_contact_messages(_: dict = Depends(require_admin)):
+    messages = await contact_collection.find({"archived": True}).sort("archived_at", -1).to_list(length=300)
+    return [{
+        "id": str(item["_id"]), "name": item["name"], "email": item["email"],
+        "message": item["message"], "createdAt": item["created_at"], "archivedAt": item.get("archived_at"),
+    } for item in messages]
+
+
+@router.post("/admin/{message_id}/archive")
+async def archive_contact_message(message_id: str, _: dict = Depends(require_admin)):
+    if not ObjectId.is_valid(message_id):
+        raise HTTPException(status_code=404, detail="Brevet hittades inte.")
+    result = await contact_collection.update_one(
+        {"_id": ObjectId(message_id)},
+        {"$set": {"archived": True, "archived_at": datetime.now(timezone.utc)}},
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Brevet hittades inte.")
+    return {"status": "archived"}
