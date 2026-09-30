@@ -28,6 +28,13 @@ const favoriteRecipes = computed(() => allRecipes.value.filter((recipe) => favor
 const activeTab = ref<'favorites' | 'mine'>('favorites')
 
 const isEditingProfile = ref(false)
+const twoFactorEnabled = ref(false)
+const isPreparingTwoFactor = ref(false)
+const qrCode = ref('')
+const manualCode = ref('')
+const verificationCode = ref('')
+const recoveryCodes = ref<string[]>([])
+const twoFactorError = ref('')
 
 async function loadRecipes() {
   try { allRecipes.value = (await api.get<Recipe[]>('/recipes/')).data } catch { allRecipes.value = [] }
@@ -37,9 +44,36 @@ async function loadRecipes() {
 onMounted(() => {
   loadProfile()
   loadRecipes()
+  loadTwoFactorStatus()
 })
 
 function goToNewRecipe() { router.push('/recipes/new') }
+
+async function loadTwoFactorStatus() {
+  try { twoFactorEnabled.value = (await api.get('/auth/2fa/status')).data.enabled } catch { twoFactorEnabled.value = false }
+}
+async function beginTwoFactorSetup() {
+  twoFactorError.value = ''
+  try {
+    const response = await api.post('/auth/2fa/setup')
+    qrCode.value = response.data.qrCode
+    manualCode.value = response.data.manualCode
+    isPreparingTwoFactor.value = true
+  } catch (error: any) {
+    twoFactorError.value = error.response?.data?.detail || 'Kunde inte starta 2FA-installationen.'
+  }
+}
+async function confirmTwoFactorSetup() {
+  twoFactorError.value = ''
+  try {
+    const response = await api.post('/auth/2fa/setup/verify', { code: verificationCode.value })
+    recoveryCodes.value = response.data.recoveryCodes
+    twoFactorEnabled.value = true
+    isPreparingTwoFactor.value = false
+  } catch (error: any) {
+    twoFactorError.value = error.response?.data?.detail || 'Koden kunde inte verifieras.'
+  }
+}
 </script>
 
 <template>
@@ -64,6 +98,37 @@ function goToNewRecipe() { router.push('/recipes/new') }
       <transition name="toast"><div v-if="toast" class="toast" role="status">✓ {{ toast }}</div></transition>
 
       <p class="bio">Välkommen till min personliga receptsamling! Här sparar jag mina favoriter, provar nya idéer och delar matglädjen med andra.</p>
+
+      <section class="security-card">
+        <div>
+          <p class="eyebrow">KONTOSÄKERHET</p>
+          <h2>Authenticator-app</h2>
+          <p v-if="twoFactorEnabled">2FA är aktivt. Du använder en kod från din Authenticator-app vid inloggning.</p>
+          <p v-else>Skydda kontot med en engångskod från Google Authenticator, Microsoft Authenticator eller Authy.</p>
+        </div>
+        <button v-if="!twoFactorEnabled && !isPreparingTwoFactor" type="button" class="setup-2fa" @click="beginTwoFactorSetup">Aktivera 2FA</button>
+        <span v-else-if="twoFactorEnabled" class="enabled-2fa">Aktivt</span>
+      </section>
+
+      <section v-if="isPreparingTwoFactor" class="two-factor-setup">
+        <h2>Ställ in Authenticator</h2>
+        <ol>
+          <li>Öppna en Authenticator-app på mobilen och välj att lägga till ett konto.</li>
+          <li>Skanna QR-koden nedan.</li>
+          <li>Skriv in den sexsiffriga koden från appen för att bekräfta.</li>
+        </ol>
+        <img :src="qrCode" alt="QR-kod för att ställa in tvåfaktorsautentisering" class="totp-qr" />
+        <details><summary>Kan du inte skanna?</summary><code>{{ manualCode }}</code></details>
+        <input v-model="verificationCode" inputmode="numeric" maxlength="6" placeholder="Kod från appen" class="two-factor-code" />
+        <button type="button" class="setup-2fa" @click="confirmTwoFactorSetup">Bekräfta kod</button>
+        <p v-if="twoFactorError" class="two-factor-error">{{ twoFactorError }}</p>
+      </section>
+
+      <section v-if="recoveryCodes.length" class="recovery-codes">
+        <h2>Spara dina återställningskoder</h2>
+        <p>Varje kod fungerar en gång om du tappar mobilen. Spara dem på en säker plats.</p>
+        <code v-for="recoveryCode in recoveryCodes" :key="recoveryCode">{{ recoveryCode }}</code>
+      </section>
 
       <section class="stats"><div><strong>{{ favoriteRecipes.length }}</strong><span>Favoriter</span></div><div><strong>{{ myRecipes.length }}</strong><span>Mina recept</span></div><div><strong>{{ allRecipes.length }}</strong><span>Recept att prova</span></div></section>
 
@@ -116,7 +181,7 @@ function goToNewRecipe() { router.push('/recipes/new') }
 .edit-actions .cancel { border: 1px solid #e5d7ce; background: white; color: #655a54; border-radius: 5px; padding: .5rem .9rem; font: .7rem Arial, sans-serif; cursor: pointer; }
 .error-banner { background-color: #fde8e8; color: #9b1c1c; padding: .6rem; border-radius: 6px; font-size: .75rem; }
 .fade-enter-active, .fade-leave-active { transition: opacity .18s ease, transform .18s ease; } .fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(-6px); }
-.bio { max-width: 650px; margin: 1rem 0; color: #83756e; font: .73rem/1.6 Arial, sans-serif; }.stats { display: flex; gap: .7rem; margin: 1.4rem 0 2rem; }.stats div { min-width: 95px; padding: .6rem .9rem; border: 1px solid #eee1d8; border-radius: 5px; background: white; text-align: center; }.stats strong { display: block; color: #bd704f; font-size: 1.1rem; }.stats span { color: #8c7e76; font: .58rem Arial, sans-serif; }.layout { display: grid; grid-template-columns: 235px 1fr; gap: 2.5rem; }aside h2, .favorites h2 { margin: 0; font-size: 1.1rem; }.menu-item { display: flex; justify-content: space-between; width: 100%; margin-top: .55rem; border: 1px solid #eee3dc; border-radius: 5px; background: white; padding: .68rem .75rem; color: #70635d; font: .68rem Arial, sans-serif; text-align: left; cursor: pointer; }.menu-item.active { border-color: #d98a69; background: #fff6f1; color: #bc6d4f; }.tip { margin-top: 1rem; border-radius: 6px; background: #fbede7; padding: .8rem; }.tip strong { color: #bf7053; font: .58rem Arial, sans-serif; }.tip p { margin: .35rem 0 0; color: #796b64; font: .62rem/1.45 Arial, sans-serif; }.section-top { display: flex; justify-content: space-between; align-items: end; margin-bottom: 1rem; }.section-top a { color: #bd6d50; font: .65rem Arial, sans-serif; text-decoration: none; }.recipe-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; }.recipe-card { position: relative; overflow: hidden; border: 1px solid #eee4dc; border-radius: 7px; background: white; box-shadow: 0 2px 7px rgb(56 32 20 / 6%); }.recipe-link { color: inherit; text-decoration: none; }.recipe-card img { display: block; width: 100%; height: 135px; object-fit: cover; }.recipe-card div { padding: .7rem; }.recipe-card p { margin: 0 0 .3rem; color: #c0785b; font: .56rem Arial, sans-serif; }.private-tag { background: #f3e2da; color: #a55c3f; border-radius: 999px; padding: .1rem .4rem; font-style: normal; margin-left: .3rem; }.recipe-card h3 { margin: 0 0 .45rem; font-size: .88rem; font-style: italic; }.recipe-card span { color: #9f9189; font: .6rem Arial, sans-serif; }.heart { position: absolute; right: .6rem; bottom: .6rem; border: 0; background: none; color: #c87355; font-size: 1rem; cursor: pointer; }.edit-mini { position: absolute; right: .6rem; bottom: .6rem; border: 1px solid #eaded5; border-radius: 5px; background: white; padding: .25rem .5rem; color: #bc6d4f; font: .6rem Arial, sans-serif; text-decoration: none; }.empty { border: 1px dashed #dfcfc5; border-radius: 8px; padding: 3.5rem 1.5rem; text-align: center; }.empty > span { color: #ce7c5d; font-size: 2rem; }.empty h3 { margin: .5rem 0; }.empty p { color: #81736c; font: .73rem Arial, sans-serif; }.empty a { color: #bd6d50; font: .72rem Arial, sans-serif; }footer { padding: 1.8rem; background: #f0e9e1; text-align: center; color: #453833; font-style: italic; font-weight: bold; }footer small { display: block; margin-top: .45rem; color: #93857d; font: .58rem Arial, sans-serif; }footer span::after { content: ''; display: block; width: 20px; height: 1px; margin: .6rem auto 0; background: #c87554; }@media (max-width: 720px) { .navbar { padding-inline: 1.5rem; }nav { gap: .7rem; }.cover { height: 130px; }main { width: min(100% - 2rem, 1040px); }.layout { grid-template-columns: 1fr; }.recipe-grid { grid-template-columns: 1fr; }.profile-intro { flex-wrap: wrap; }.edit { margin-left: 0; }.new-recipe { margin-right: auto; } }
+.bio { max-width: 650px; margin: 1rem 0; color: #83756e; font: .73rem/1.6 Arial, sans-serif; }.security-card, .two-factor-setup, .recovery-codes { margin: 1.25rem 0; padding: 1.1rem 1.2rem; border: 1px solid #eee1d8; border-radius: 8px; background: #fff; }.security-card { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }.security-card h2, .two-factor-setup h2, .recovery-codes h2 { margin: 0; font-size: 1rem; }.security-card p, .two-factor-setup p, .recovery-codes p, .two-factor-setup li { color: #746862; font: .72rem/1.5 Arial, sans-serif; }.setup-2fa { border: 1px solid #c87050; border-radius: 6px; background: #c87050; color: #fff; padding: .5rem .8rem; font: 600 .7rem Arial, sans-serif; cursor: pointer; }.enabled-2fa { color: #287440; font: 600 .7rem Arial, sans-serif; }.two-factor-setup ol { padding-left: 1.2rem; }.totp-qr { display: block; width: 180px; height: 180px; margin: .8rem 0; image-rendering: pixelated; }.two-factor-setup details { margin-bottom: .8rem; color: #746862; font: .7rem Arial, sans-serif; }.two-factor-setup details code { display: block; margin-top: .5rem; word-break: break-all; }.two-factor-code { display: block; width: 180px; margin: .8rem 0; padding: .55rem .7rem; border: 1px solid #e2ddd5; border-radius: 6px; letter-spacing: .2em; font: 700 .85rem Arial, sans-serif; }.two-factor-error { color: #a3342d !important; }.recovery-codes code { display: inline-block; margin: .25rem; padding: .35rem .5rem; border-radius: 4px; background: #f7f2ed; color: #493c35; font: 700 .75rem monospace; }.stats { display: flex; gap: .7rem; margin: 1.4rem 0 2rem; }.stats div { min-width: 95px; padding: .6rem .9rem; border: 1px solid #eee1d8; border-radius: 5px; background: white; text-align: center; }.stats strong { display: block; color: #bd704f; font-size: 1.1rem; }.stats span { color: #8c7e76; font: .58rem Arial, sans-serif; }.layout { display: grid; grid-template-columns: 235px 1fr; gap: 2.5rem; }aside h2, .favorites h2 { margin: 0; font-size: 1.1rem; }.menu-item { display: flex; justify-content: space-between; width: 100%; margin-top: .55rem; border: 1px solid #eee3dc; border-radius: 5px; background: white; padding: .68rem .75rem; color: #70635d; font: .68rem Arial, sans-serif; text-align: left; cursor: pointer; }.menu-item.active { border-color: #d98a69; background: #fff6f1; color: #bc6d4f; }.tip { margin-top: 1rem; border-radius: 6px; background: #fbede7; padding: .8rem; }.tip strong { color: #bf7053; font: .58rem Arial, sans-serif; }.tip p { margin: .35rem 0 0; color: #796b64; font: .62rem/1.45 Arial, sans-serif; }.section-top { display: flex; justify-content: space-between; align-items: end; margin-bottom: 1rem; }.section-top a { color: #bd6d50; font: .65rem Arial, sans-serif; text-decoration: none; }.recipe-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; }.recipe-card { position: relative; overflow: hidden; border: 1px solid #eee4dc; border-radius: 7px; background: white; box-shadow: 0 2px 7px rgb(56 32 20 / 6%); }.recipe-link { color: inherit; text-decoration: none; }.recipe-card img { display: block; width: 100%; height: 135px; object-fit: cover; }.recipe-card div { padding: .7rem; }.recipe-card p { margin: 0 0 .3rem; color: #c0785b; font: .56rem Arial, sans-serif; }.private-tag { background: #f3e2da; color: #a55c3f; border-radius: 999px; padding: .1rem .4rem; font-style: normal; margin-left: .3rem; }.recipe-card h3 { margin: 0 0 .45rem; font-size: .88rem; font-style: italic; }.recipe-card span { color: #9f9189; font: .6rem Arial, sans-serif; }.heart { position: absolute; right: .6rem; bottom: .6rem; border: 0; background: none; color: #c87355; font-size: 1rem; cursor: pointer; }.edit-mini { position: absolute; right: .6rem; bottom: .6rem; border: 1px solid #eaded5; border-radius: 5px; background: white; padding: .25rem .5rem; color: #bc6d4f; font: .6rem Arial, sans-serif; text-decoration: none; }.empty { border: 1px dashed #dfcfc5; border-radius: 8px; padding: 3.5rem 1.5rem; text-align: center; }.empty > span { color: #ce7c5d; font-size: 2rem; }.empty h3 { margin: .5rem 0; }.empty p { color: #81736c; font: .73rem Arial, sans-serif; }.empty a { color: #bd6d50; font: .72rem Arial, sans-serif; }footer { padding: 1.8rem; background: #f0e9e1; text-align: center; color: #453833; font-style: italic; font-weight: bold; }footer small { display: block; margin-top: .45rem; color: #93857d; font: .58rem Arial, sans-serif; }footer span::after { content: ''; display: block; width: 20px; height: 1px; margin: .6rem auto 0; background: #c87554; }@media (max-width: 720px) { .navbar { padding-inline: 1.5rem; }nav { gap: .7rem; }.cover { height: 130px; }main { width: min(100% - 2rem, 1040px); }.layout { grid-template-columns: 1fr; }.recipe-grid { grid-template-columns: 1fr; }.profile-intro { flex-wrap: wrap; }.edit { margin-left: 0; }.new-recipe { margin-right: auto; } }
 .toast { position: fixed; left: 50%; bottom: 2rem; transform: translateX(-50%); z-index: 90; padding: .8rem 1.3rem; border-radius: 999px; background: #2b211c; color: #fff; font-size: .85rem; font-weight: 500; box-shadow: 0 12px 30px rgba(43,33,28,.3); }
 .toast-enter-active, .toast-leave-active { transition: opacity .25s, transform .25s; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, 12px); }

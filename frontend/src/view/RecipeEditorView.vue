@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api } from '@/lib/api'
+import { api, type IngredientGroup } from '@/lib/api'
 import AppLogo from '@/components/AppLogo.vue'
 import AppNavProfile from '@/components/AppNavProfile.vue'
+import SelectDropdown from '@/components/SelectDropdown.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -13,12 +14,18 @@ const isEditMode = computed(() => !!editingSlug.value)
 
 const title = ref('')
 const category = ref('')
-const time = ref('')
+const timeHours = ref(0)
+const timeMinutes = ref(0)
 const image = ref('')
 const description = ref('')
-const ingredients = ref<string[]>([''])
+const difficulty = ref<'Lätt' | 'Medel' | 'Svår'>('Medel')
+const portions = ref(4)
 const steps = ref<string[]>([''])
 const isPublic = ref(true)
+
+const ingredientGroups = ref<IngredientGroup[]>([{ name: 'Ingredienser', items: [''] }])
+const activeGroup = ref(0)
+const currentGroup = computed(() => ingredientGroups.value[activeGroup.value] ?? null)
 
 const categories = ref<string[]>([])
 const isLoading = ref(false)
@@ -44,12 +51,16 @@ onMounted(async () => {
     const r = response.data
     title.value = r.title
     category.value = r.category
-    time.value = r.time
+    setDuration(r.time)
     image.value = r.image
     description.value = r.description
-    ingredients.value = r.ingredients?.length ? [...r.ingredients] : ['']
+    difficulty.value = ['Lätt', 'Medel', 'Svår'].includes(r.difficulty) ? r.difficulty : 'Medel'
+    portions.value = r.portions || 4
     steps.value = r.steps?.length ? [...r.steps] : ['']
     isPublic.value = r.isPublic !== false
+    ingredientGroups.value = r.ingredientGroups?.length
+      ? r.ingredientGroups.map((g: IngredientGroup) => ({ name: g.name, items: g.items.length ? [...g.items] : [''] }))
+      : [{ name: 'Ingredienser', items: [''] }]
   } catch {
     errorMessage.value = 'Kunde inte ladda receptet för redigering.'
   } finally {
@@ -57,14 +68,36 @@ onMounted(async () => {
   }
 })
 
-function addIngredient() { ingredients.value.push('') }
-function removeIngredient(index: number) { ingredients.value.splice(index, 1) }
+function addGroup() {
+  ingredientGroups.value.push({ name: '', items: [''] })
+  activeGroup.value = ingredientGroups.value.length - 1
+}
+function removeGroup(index: number) {
+  if (ingredientGroups.value.length <= 1) return
+  ingredientGroups.value.splice(index, 1)
+  activeGroup.value = Math.max(0, Math.min(activeGroup.value, ingredientGroups.value.length - 1))
+}
+function addIngredientRow() { currentGroup.value?.items.push('') }
+function removeIngredientRow(index: number) {
+  const items = currentGroup.value?.items
+  if (!items) return
+  if (items.length > 1) items.splice(index, 1)
+}
 function addStep() { steps.value.push('') }
 function removeStep(index: number) { steps.value.splice(index, 1) }
 
-// Skalar ner och komprimerar bilden i webbläsaren innan den skickas till
-// servern, så att stora foton (många MB rakt från mobilkameran) inte gör
-// sparningen instabil eller för långsam.
+function setDuration(value: string) {
+  const hours = Number(value.match(/(\d+)\s*(?:h|tim)/i)?.[1] || 0)
+  const minutes = Number(value.match(/(\d+)\s*(?:min|m(?![a-z]))/i)?.[1] || 0)
+  timeHours.value = Math.max(0, Math.min(24, hours))
+  timeMinutes.value = Math.max(0, Math.min(59, minutes || (hours ? 0 : Number(value.match(/\d+/)?.[0] || 0))))
+}
+function formattedDuration() {
+  const hours = Math.max(0, Math.min(24, Number(timeHours.value) || 0))
+  const minutes = Math.max(0, Math.min(59, Number(timeMinutes.value) || 0))
+  return [hours ? `${hours} h` : '', minutes ? `${minutes} min` : ''].filter(Boolean).join(' ') || ''
+}
+
 function resizeImage(file: File, maxDim = 1200, quality = 0.82): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -96,14 +129,8 @@ async function onImageSelected(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
   errorMessage.value = ''
-  if (!file.type.startsWith('image/')) {
-    errorMessage.value = 'Filen måste vara en bild.'
-    return
-  }
-  if (file.size > 15 * 1024 * 1024) {
-    errorMessage.value = 'Bilden är för stor (max 15 MB innan komprimering).'
-    return
-  }
+  if (!file.type.startsWith('image/')) { errorMessage.value = 'Filen måste vara en bild.'; return }
+  if (file.size > 15 * 1024 * 1024) { errorMessage.value = 'Bilden är för stor (max 15 MB innan komprimering).'; return }
   isProcessingImage.value = true
   try {
     image.value = await resizeImage(file)
@@ -128,12 +155,14 @@ async function save() {
   const payload = {
     title: title.value.trim(),
     category: category.value.trim() || 'Övrigt',
-    time: time.value.trim(),
+    time: formattedDuration(),
     image: image.value,
     description: description.value.trim(),
-    ingredients: ingredients.value.map((i) => i.trim()).filter(Boolean),
+    ingredient_groups: ingredientGroups.value.map((g) => ({ name: g.name.trim() || 'Ingredienser', items: g.items.map((i) => i.trim()).filter(Boolean) })),
     steps: steps.value.map((s) => s.trim()).filter(Boolean),
     is_public: isPublic.value,
+    difficulty: difficulty.value,
+    portions: portions.value,
   }
   try {
     if (isEditMode.value) {
@@ -173,12 +202,31 @@ async function save() {
 
         <div class="row">
           <label>Kategori
-            <input v-model="category" type="text" list="category-options" placeholder="T.ex. Middag" />
-            <datalist id="category-options">
-              <option v-for="cat in categories" :key="cat" :value="cat" />
-            </datalist>
+            <SelectDropdown v-model="category" :options="categories" placeholder="Välj kategori" />
           </label>
-          <label>Tid<input v-model="time" type="text" placeholder="T.ex. 45 min" /></label>
+          <fieldset class="duration-fields">
+            <legend>Tid</legend>
+            <div>
+              <label>Timmar<input v-model.number="timeHours" type="number" min="0" max="24" inputmode="numeric" /></label>
+              <label>Minuter<input v-model.number="timeMinutes" type="number" min="0" max="59" inputmode="numeric" /></label>
+            </div>
+            <small>{{ formattedDuration() || 'Ange tillagningstid' }}</small>
+          </fieldset>
+        </div>
+
+        <div class="row">
+          <label>Svårighetsgrad
+            <div class="segmented">
+              <button v-for="level in (['Lätt', 'Medel', 'Svår'] as const)" :key="level" type="button" :class="{ active: difficulty === level }" @click="difficulty = level">{{ level }}</button>
+            </div>
+          </label>
+          <label>Portioner
+            <div class="stepper">
+              <button type="button" @click="portions = Math.max(1, portions - 1)" aria-label="Färre portioner">−</button>
+              <span>{{ portions }}</span>
+              <button type="button" @click="portions = Math.min(50, portions + 1)" aria-label="Fler portioner">+</button>
+            </div>
+          </label>
         </div>
 
         <label>Bild
@@ -191,8 +239,8 @@ async function save() {
             <div class="image-actions">
               <input ref="imageInput" type="file" accept="image/*" hidden @change="onImageSelected" />
               <button type="button" class="pick-image" @click="imageInput?.click()">{{ image ? 'Byt bild' : 'Välj bild' }}</button>
-              <small class="hint">JPG eller PNG. Bilden komprimeras automatiskt.</small>
               <button v-if="image" type="button" class="remove-image" @click="removeImage">Ta bort bild</button>
+              <small class="hint">JPG eller PNG. Bilden komprimeras automatiskt.</small>
             </div>
           </div>
         </label>
@@ -201,11 +249,25 @@ async function save() {
 
         <div class="dynamic-list">
           <span class="list-label">Ingredienser</span>
-          <div v-for="(ingredient, index) in ingredients" :key="index" class="dynamic-row">
-            <input v-model="ingredients[index]" type="text" :placeholder="`Ingrediens ${index + 1}, t.ex. 500 g nötfärs`" />
-            <button v-if="ingredients.length > 1" type="button" class="remove-row" @click="removeIngredient(index)" aria-label="Ta bort ingrediens">✕</button>
+          <p class="list-help">Dela upp i grupper om receptet har flera delar, t.ex. "Köttbullar" och "Potatismos".</p>
+          <div class="group-tabs">
+            <button v-for="(group, gi) in ingredientGroups" :key="gi" type="button" class="tab" :class="{ active: activeGroup === gi }" @click="activeGroup = gi">
+              {{ group.name || `Grupp ${gi + 1}` }}
+            </button>
+            <button type="button" class="add-tab" @click="addGroup">+ Ny grupp</button>
           </div>
-          <button type="button" class="add-row" @click="addIngredient">+ Lägg till ingrediens</button>
+
+          <div v-if="currentGroup" class="group-panel">
+            <input v-model="currentGroup.name" type="text" class="group-name" placeholder="Namn på gruppen, t.ex. Potatismos" maxlength="40" />
+            <div v-for="(ingredient, index) in currentGroup.items" :key="index" class="dynamic-row">
+              <input v-model="currentGroup.items[index]" type="text" :placeholder="`Ingrediens ${index + 1}, t.ex. 500 g nötfärs`" />
+              <button v-if="currentGroup.items.length > 1" type="button" class="remove-row" @click="removeIngredientRow(index)" aria-label="Ta bort ingrediens">✕</button>
+            </div>
+            <div class="group-panel-actions">
+              <button type="button" class="add-row" @click="addIngredientRow">+ Lägg till ingrediens</button>
+              <button v-if="ingredientGroups.length > 1" type="button" class="remove-group" @click="removeGroup(activeGroup)">Ta bort gruppen</button>
+            </div>
+          </div>
         </div>
 
         <div class="dynamic-list">
@@ -245,19 +307,45 @@ h1 { margin: 0 0 1.5rem; font-size: 2rem; }
 .recipe-form > label { display: flex; flex-direction: column; gap: .4rem; font: 600 .78rem Arial, sans-serif; color: #443e39; }
 .recipe-form input[type="text"], .recipe-form textarea { border: 1px solid #e2ddd5; border-radius: 8px; padding: .65rem .8rem; font: .85rem Arial, sans-serif; outline: none; resize: vertical; width: 100%; box-sizing: border-box; }
 .recipe-form input:focus, .recipe-form textarea:focus { border-color: #c87a57; }
-.row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
+.duration-fields { margin: 0; min-width: 0; border: 0; padding: 0; color: #443e39; font: 600 .78rem Arial, sans-serif; }
+.duration-fields legend { margin-bottom: .4rem; padding: 0; }
+.duration-fields > div { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.duration-fields label { display: flex; flex-direction: column; gap: .25rem; color: #84766f; font: 500 .65rem Arial, sans-serif; }
+.duration-fields input { width: 100%; box-sizing: border-box; border: 1px solid #e2ddd5; border-radius: 8px; padding: .65rem .7rem; color: #382e2a; font: .85rem Arial, sans-serif; }
+.duration-fields input:focus { border-color: #c87a57; outline: none; box-shadow: 0 0 0 3px rgba(196,98,63,.12); }
+.duration-fields small { display: block; margin-top: .4rem; color: #9a8c84; font: 400 .66rem Arial, sans-serif; }
+.segmented { display: flex; border: 1px solid #e2ddd5; border-radius: 10px; overflow: hidden; }
+.segmented button { flex: 1; padding: .6rem .5rem; border: 0; background: #fff; color: #6b5e57; font: 600 .78rem Arial, sans-serif; cursor: pointer; border-right: 1px solid #e2ddd5; }
+.segmented button:last-child { border-right: 0; }
+.segmented button.active { background: #c4623f; color: #fff; }
+.stepper { display: flex; align-items: center; gap: .8rem; border: 1px solid #e2ddd5; border-radius: 10px; padding: .35rem .7rem; width: fit-content; }
+.stepper button { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #e2ddd5; background: #fff; color: #4a3d36; font-size: 1rem; line-height: 1; cursor: pointer; }
+.stepper button:hover { border-color: #c4623f; color: #c4623f; }
+.stepper span { min-width: 1.5rem; text-align: center; font: 600 .95rem Arial, sans-serif; }
 .image-uploader { display: flex; gap: 1rem; align-items: center; }
 .preview { width: 140px; height: 100px; flex-shrink: 0; border-radius: 8px; border: 1px dashed #dfd2c8; display: grid; place-items: center; overflow: hidden; background: #faf5f0; }
 .preview img { width: 100%; height: 100%; object-fit: cover; }
 .preview.empty span { color: #b3a49a; font: .65rem Arial, sans-serif; text-align: center; padding: 0 .5rem; }
-.image-actions { display: flex; flex-direction: column; gap: .5rem; }
-.image-actions input[type="file"] { font: .72rem Arial, sans-serif; }
-.remove-image { align-self: flex-start; border: 1px solid #e9ddd5; border-radius: 6px; background: white; padding: .35rem .6rem; font: .68rem Arial, sans-serif; color: #b3453a; cursor: pointer; }
+.image-actions { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; }
+.pick-image { padding: .55rem 1.1rem; border: 1px solid #e3d6cb; border-radius: 999px; background: #fff; color: #4a3d36; font: 600 .82rem Arial, sans-serif; cursor: pointer; }
+.pick-image:hover { border-color: #c4623f; color: #c4623f; background: #fffaf6; }
+.remove-image { border: 1px solid #e9ddd5; border-radius: 6px; background: white; padding: .35rem .6rem; font: .68rem Arial, sans-serif; color: #b3453a; cursor: pointer; }
+.hint { color: #9a8c84; font: 400 .68rem Arial, sans-serif; }
 .dynamic-list { display: flex; flex-direction: column; gap: .5rem; }
 .list-label { font: 600 .78rem Arial, sans-serif; color: #443e39; }
+.list-help { margin: -.2rem 0 .3rem; color: #9a8c84; font: 400 .7rem Arial, sans-serif; }
+.group-tabs { display: flex; flex-wrap: wrap; gap: .4rem; }
+.tab { border: 1px solid #e2d7cf; border-radius: 999px; background: #fffdfa; color: #6b5e57; padding: .4rem .8rem; font: 600 .68rem Arial, sans-serif; cursor: pointer; }
+.tab.active { border-color: #c4623f; background: #c4623f; color: #fff; }
+.add-tab { border: 1px dashed #d9a889; border-radius: 999px; background: #fffaf6; color: #bc6d4f; padding: .4rem .8rem; font: 600 .68rem Arial, sans-serif; cursor: pointer; }
+.group-panel { display: flex; flex-direction: column; gap: .55rem; margin-top: .3rem; padding: 1rem; border: 1px solid #eee1d8; border-radius: 10px; background: #fffdfb; }
+.group-name { font-weight: 600; }
 .dynamic-row { display: flex; align-items: flex-start; gap: .5rem; }
 .step-number { flex: 0 0 22px; height: 22px; margin-top: .4rem; border-radius: 50%; background: #fcece5; color: #c77354; display: grid; place-items: center; font: 700 .68rem Arial, sans-serif; }
 .remove-row { flex: 0 0 auto; border: 1px solid #e9ddd5; border-radius: 6px; background: white; width: 32px; height: 32px; color: #b3453a; cursor: pointer; }
+.group-panel-actions { display: flex; justify-content: space-between; align-items: center; margin-top: .3rem; }
+.remove-group { border: 0; background: none; color: #b3453a; font: 500 .7rem Arial, sans-serif; cursor: pointer; }
 .add-row { align-self: flex-start; border: 1px dashed #d9a889; border-radius: 8px; background: #fffaf6; color: #bc6d4f; padding: .5rem .9rem; font: 600 .72rem Arial, sans-serif; cursor: pointer; }
 .add-row:hover { background: #fff1e8; }
 .visibility { border: 1px solid #e2ddd5; border-radius: 8px; padding: .9rem 1rem 1.1rem; display: flex; flex-direction: column; gap: .6rem; }
@@ -275,8 +363,4 @@ footer { padding: 1.8rem; background: #f0e9e1; text-align: center; color: #45383
 .fade-enter-active, .fade-leave-active { transition: opacity .18s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 @media (max-width: 620px) { .row { grid-template-columns: 1fr; } .image-uploader { flex-direction: column; align-items: flex-start; } }
-.pick-image { align-self: flex-start; padding: .55rem 1.1rem; border: 1px solid #e3d6cb; border-radius: 999px; background: #fff; color: #4a3d36; font: 600 .82rem Inter, sans-serif; cursor: pointer; }
-.pick-image:hover { border-color: #c4623f; color: #c4623f; background: #fffaf6; }
-.hint { color: #9a8c84; font-weight: 400; }
-.preview { border-radius: 14px; }
 </style>

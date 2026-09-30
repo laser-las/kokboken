@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import AppLogo from '@/components/AppLogo.vue'
@@ -10,6 +10,49 @@ const password = ref('')
 const confirmPassword = ref('')
 const errorMessage = ref('')
 const isLoading = ref(false)
+const step = ref('register')
+const setupToken = ref('')
+const qrCode = ref('')
+const manualCode = ref('')
+const authenticatorCode = ref('')
+const recoveryCodes = ref([])
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+const googleReady = ref(false)
+const googleButton = ref(null)
+
+const handleGoogleCredential = async (googleResponse) => {
+  errorMessage.value = ''
+  try {
+    const response = await axios.post('http://localhost:8001/api/auth/google', { credential: googleResponse.credential })
+    sessionStorage.setItem('token', response.data.access_token)
+    sessionStorage.setItem('userEmail', response.data.email)
+    sessionStorage.setItem('userRole', response.data.role)
+    if (response.data.sessionId) sessionStorage.setItem('sessionId', response.data.sessionId)
+    router.push(response.data.role === 'admin' ? '/admin' : '/recipes')
+  } catch (error) {
+    errorMessage.value = error.response?.data?.detail || 'Google-inloggningen misslyckades.'
+  }
+}
+
+onMounted(() => {
+  if (!googleClientId) return
+  const script = document.createElement('script')
+  script.src = 'https://accounts.google.com/gsi/client?hl=sv'
+  script.async = true
+  script.onload = () => {
+    window.google.accounts.id.initialize({ client_id: googleClientId, callback: handleGoogleCredential })
+    googleReady.value = true
+    nextTick(() => {
+      if (!googleButton.value) return
+      window.google.accounts.id.renderButton(googleButton.value, {
+        type: 'standard', theme: 'outline', size: 'large', text: 'signup_with',
+        shape: 'rectangular', logo_alignment: 'left', width: 320,
+      })
+    })
+  }
+  script.onerror = () => { errorMessage.value = 'Kunde inte ladda Google-inloggning. Kontrollera din internetanslutning.' }
+  document.head.appendChild(script)
+})
 
 const handleRegister = async () => {
   errorMessage.value = ''
@@ -26,20 +69,40 @@ const handleRegister = async () => {
       password: password.value
     })
 
-    if (response.data.access_token) {
-      sessionStorage.setItem('token', response.data.access_token)
-    }
-    if (response.data.email) {
-      sessionStorage.setItem('userEmail', response.data.email)
-    }
-
-    router.push('/login')
+    setupToken.value = response.data.setup_token
+    const setup = await axios.post('http://localhost:8001/api/auth/2fa/setup', {}, {
+      headers: { Authorization: `Bearer ${setupToken.value}` }
+    })
+    qrCode.value = setup.data.qrCode
+    manualCode.value = setup.data.manualCode
+    step.value = 'authenticator'
   } catch (error) {
     errorMessage.value = error.response?.data?.detail || 'Det gick inte att skapa kontot.'
   } finally {
     isLoading.value = false
   }
 }
+
+const finishAuthenticatorSetup = async () => {
+  errorMessage.value = ''
+  isLoading.value = true
+  try {
+    const response = await axios.post('http://localhost:8001/api/auth/2fa/setup/verify', {
+      code: authenticatorCode.value
+    }, { headers: { Authorization: `Bearer ${setupToken.value}` } })
+    recoveryCodes.value = response.data.recoveryCodes
+    sessionStorage.setItem('token', response.data.access_token)
+    sessionStorage.setItem('userEmail', response.data.email)
+    sessionStorage.setItem('userRole', response.data.role)
+    step.value = 'recovery'
+  } catch (error) {
+    errorMessage.value = error.response?.data?.detail || 'Koden kunde inte verifieras.'
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const finishRegistration = () => router.push('/recipes')
 </script>
 
 <template>
@@ -69,14 +132,14 @@ const handleRegister = async () => {
 
         <!-- Höger sida: Formulär -->
         <div class="form-panel">
-          <h1 class="form-title">Skapa konto</h1>
+          <h1 class="form-title">{{ step === 'register' ? 'Skapa konto' : step === 'authenticator' ? 'Skydda ditt konto' : 'Spara återställningskoder' }}</h1>
           <p class="form-subtitle">Bli en del av Köksboken och spara dina matminnen.</p>
 
           <div v-if="errorMessage" class="error-banner">
             {{ errorMessage }}
           </div>
 
-          <form @submit.prevent="handleRegister" class="auth-form">
+          <form v-if="step === 'register'" @submit.prevent="handleRegister" class="auth-form">
             <div class="input-group">
               <label>E-postadress</label>
               <div class="input-wrapper">
@@ -121,7 +184,29 @@ const handleRegister = async () => {
             </button>
           </form>
 
-          <p class="switch-mode">
+          <template v-if="step === 'register'">
+            <div class="divider"><span>ELLER</span></div>
+            <div v-if="googleClientId" ref="googleButton" class="google-button" :class="{ ready: googleReady }" aria-label="Skapa konto med Google"></div>
+            <p v-else class="google-unavailable">Google-registrering är inte konfigurerad ännu.</p>
+          </template>
+
+          <section v-else-if="step === 'authenticator'" class="auth-form authenticator-setup">
+            <p>Öppna Google Authenticator eller Microsoft Authenticator, lägg till ett konto och skanna QR-koden.</p>
+            <img :src="qrCode" alt="QR-kod för Authenticator" class="totp-qr" />
+            <details><summary>Kan du inte skanna QR-koden?</summary><code>{{ manualCode }}</code></details>
+            <label class="input-group">Kod från Authenticator
+              <input v-model="authenticatorCode" inputmode="numeric" maxlength="6" placeholder="123456" required />
+            </label>
+            <button type="button" class="btn-primary" :disabled="isLoading || authenticatorCode.length !== 6" @click="finishAuthenticatorSetup">{{ isLoading ? 'Bekräftar...' : 'Aktivera 2FA' }}</button>
+          </section>
+
+          <section v-else class="auth-form recovery-codes">
+            <p>Spara dessa åtta engångskoder på ett säkert ställe. De visas bara nu.</p>
+            <code v-for="recoveryCode in recoveryCodes" :key="recoveryCode">{{ recoveryCode }}</code>
+            <button type="button" class="btn-primary" @click="finishRegistration">Jag har sparat koderna</button>
+          </section>
+
+          <p v-if="step === 'register'" class="switch-mode">
             Har du redan ett konto?
             <router-link to="/login">Logga in här</router-link>
           </p>
@@ -288,6 +373,13 @@ const handleRegister = async () => {
   gap: 1.2rem;
 }
 
+.authenticator-setup p, .recovery-codes p { color: #78716a; font-size: .85rem; line-height: 1.5; }
+.totp-qr { width: 190px; height: 190px; align-self: center; image-rendering: pixelated; }
+.authenticator-setup details { font-size: .8rem; color: #665d57; }
+.authenticator-setup code { display: block; margin-top: .45rem; overflow-wrap: anywhere; }
+.authenticator-setup .input-group input { width: 100%; box-sizing: border-box; padding: .75rem; border: 1px solid #e2ddd5; border-radius: 10px; font: 700 1rem monospace; letter-spacing: .25em; }
+.recovery-codes code { display: inline-block; padding: .45rem .55rem; margin: .15rem; border-radius: 5px; background: #f7f2ed; color: #493c35; font: 700 .82rem monospace; }
+
 .input-group label {
   display: block;
   font-size: 0.85rem;
@@ -344,6 +436,13 @@ const handleRegister = async () => {
   opacity: 0.7;
   cursor: not-allowed;
 }
+
+.divider { text-align: center; margin: 1.5rem 0 1rem; position: relative; }
+.divider::before { content: ''; position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background: #eee9e0; }
+.divider span { position: relative; z-index: 1; padding: 0 .8rem; background: #fff; color: #a0988e; font: 700 .72rem Arial, sans-serif; }
+.google-button { display: flex; justify-content: center; min-height: 44px; opacity: .55; transition: opacity .18s ease; }
+.google-button.ready { opacity: 1; }
+.google-unavailable { margin: 0; border: 1px dashed #dccdc3; border-radius: 12px; background: #fffaf7; padding: .8rem 1rem; color: #8b6d5e; font-size: .78rem; text-align: center; }
 
 .switch-mode {
   text-align: center;

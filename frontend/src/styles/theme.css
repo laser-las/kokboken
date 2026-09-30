@@ -45,7 +45,7 @@ html body #app { max-width: none; margin: 0; padding: 0; display: block; }
 #app footer { background: #f3ebe2; border-top: 1px solid var(--line); }
 
 /* Formulär */
-#app input:not([type=checkbox]):not([type=radio]):not([type=file]), #app textarea { border-radius: 12px; transition: border-color .15s, box-shadow .15s; }
+#app input:not([type=checkbox]):not([type=radio]):not([type=file]), #app textarea { border-radius: 12px; border-color: #dfd3ca; background-color: #fffefa; transition: border-color .15s, box-shadow .15s, background-color .15s; }
 #app input:focus, #app textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(196,98,63,.14); outline: none; }
 #app .search-box { border-radius: 999px; box-shadow: var(--shadow-sm); border-color: var(--line); }
 #app .search-box input:focus { box-shadow: none; }
