@@ -406,6 +406,13 @@ async def online_users(_: dict = Depends(require_admin)):
     } for u in users]
 
 
+@router.get("/chat/admins-online")
+async def chat_admins_online(_: dict = Depends(current_user)):
+    threshold = datetime.now(timezone.utc) - timedelta(minutes=ONLINE_WINDOW_MINUTES)
+    count = await users_collection.count_documents({"role": "admin", "last_seen": {"$gte": threshold}})
+    return {"count": count}
+
+
 @router.get("/admin/login-log")
 async def login_log(_: dict = Depends(require_admin)):
     rows = await activity_collection.find({"login_time": {"$exists": True}}).sort("login_time", -1).to_list(length=100)

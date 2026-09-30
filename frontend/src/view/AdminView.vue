@@ -6,13 +6,16 @@ import { useAuth } from '@/composables/useAuth'
 type User = { email: string; role: 'user' | 'admin' }
 type OnlineUser = { email: string; name: string; role: string; lastSeen: string }
 type LoginLog = { id: string; email: string; loginTime: string; logoutTime: string | null; durationSeconds: number }
+type ContactMessage = { id: string; name: string; email: string; message: string; createdAt: string }
+type ChatConversation = { id: string; userEmail: string; userName: string; lastMessage: string; lastSender: string; updatedAt: string; unreadForAdmin: number }
+type ChatMessage = { id: string; message: string; sender: 'user' | 'admin'; senderName: string; createdAt: string }
 const users = ref<User[]>([])
 const error = ref('')
 const { logout } = useAuth()
 const userEmail = sessionStorage.getItem('userEmail') || 'administratör'
 const displayName = (userEmail.split('@')[0] || 'administratör').replace(/[._-]/g, ' ')
 
-const activeTab = ref<'overview' | 'recipes' | 'categories' | 'live'>('overview')
+const activeTab = ref<'overview' | 'recipes' | 'categories' | 'live' | 'support'>('overview')
 const recipes = ref<Recipe[]>([])
 const recipesError = ref('')
 const recipeSearch = ref('')
@@ -24,6 +27,13 @@ const categoriesError = ref('')
 const newCategory = ref('')
 const isSavingCategory = ref(false)
 const deletingEmail = ref('')
+const contactMessages = ref<ContactMessage[]>([])
+const conversations = ref<ChatConversation[]>([])
+const selectedConversation = ref<ChatConversation | null>(null)
+const selectedMessages = ref<ChatMessage[]>([])
+const adminReply = ref('')
+const supportError = ref('')
+const isSendingReply = ref(false)
 
 const publicRecipes = computed(() => recipes.value.filter((recipe) => recipe.isPublic).length)
 const draftRecipes = computed(() => recipes.value.filter((recipe) => !recipe.isPublic).length)
@@ -142,6 +152,39 @@ function openLiveTab() {
   loadActivity()
   loadLoginLogs()
 }
+async function loadSupport() {
+  supportError.value = ''
+  try {
+    const [contacts, chats] = await Promise.all([api.get<ContactMessage[]>('/contact/admin'), api.get<ChatConversation[]>('/chat/admin/conversations')])
+    contactMessages.value = contacts.data
+    conversations.value = chats.data
+    if (selectedConversation.value) {
+      const fresh = chats.data.find((item) => item.id === selectedConversation.value?.id)
+      if (fresh) selectedConversation.value = fresh
+    }
+  } catch { supportError.value = 'Kunde inte ladda inkorgen.' }
+}
+async function selectConversation(conversation: ChatConversation) {
+  selectedConversation.value = conversation
+  adminReply.value = ''
+  try {
+    const response = await api.get(`/chat/admin/conversations/${conversation.id}`)
+    selectedMessages.value = response.data.messages
+    await loadSupport()
+  } catch { supportError.value = 'Kunde inte ladda konversationen.' }
+}
+async function sendAdminReply() {
+  if (!selectedConversation.value || !adminReply.value.trim()) return
+  isSendingReply.value = true
+  try {
+    const response = await api.post(`/chat/admin/conversations/${selectedConversation.value.id}/messages`, { message: adminReply.value.trim() })
+    selectedMessages.value.push(response.data)
+    adminReply.value = ''
+    await loadSupport()
+  } catch (error: any) { supportError.value = error.response?.data?.detail || 'Kunde inte skicka svaret.' }
+  finally { isSendingReply.value = false }
+}
+function openSupportTab() { activeTab.value = 'support'; loadSupport() }
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z').getTime()
   const mins = Math.max(0, Math.round(diffMs / 60000))
@@ -153,8 +196,8 @@ function duration(seconds: number) { const m = Math.floor(seconds / 60); return 
 
 watch(activeTab, (tab) => {
   window.clearInterval(pollTimer)
-  if (tab === 'live') {
-    pollTimer = window.setInterval(() => { loadOnline(); loadActivity(); loadLoginLogs() }, 15000)
+  if (tab === 'live' || tab === 'support') {
+    pollTimer = window.setInterval(() => { if (tab === 'live') { loadOnline(); loadActivity(); loadLoginLogs() } else loadSupport() }, 15000)
   }
 })
 onMounted(async () => {
@@ -172,13 +215,14 @@ onBeforeUnmount(() => window.clearInterval(pollTimer))
       <a href="#" :class="{ active: activeTab === 'live' }" @click.prevent="openLiveTab">◉ Live</a>
       <a href="#" :class="{ active: activeTab === 'recipes' }" @click.prevent="openRecipesTab">▤ Recept</a>
       <a href="#" :class="{ active: activeTab === 'categories' }" @click.prevent="openCategoriesTab">◫ Kategorier</a>
+      <a href="#" :class="{ active: activeTab === 'support' }" @click.prevent="openSupportTab">✉ Inkorg</a>
       <router-link to="/profile">♙ Min profil</router-link>
       <small>{{ displayName }}<br /><span>{{ userEmail }}</span></small>
       <button class="logout" type="button" @click="logout">Logga ut</button>
     </aside>
     <main>
       <header>
-        <div><p>ADMIN / {{ ({overview:'ÖVERSIKT', live:'LIVE', recipes:'RECEPT', categories:'KATEGORIER'} as const)[activeTab] }}</p><h1>Välkommen tillbaka, {{ displayName }}.</h1></div>
+        <div><p>ADMIN / {{ ({overview:'ÖVERSIKT', live:'LIVE', recipes:'RECEPT', categories:'KATEGORIER', support:'INKORG'} as const)[activeTab] }}</p><h1>Välkommen tillbaka, {{ displayName }}.</h1></div>
         <router-link to="/recipes">Visa webbplatsen →</router-link>
       </header>
 
@@ -232,6 +276,32 @@ onBeforeUnmount(() => window.clearInterval(pollTimer))
             </article>
           </section>
         </div>
+      </template>
+
+      <template v-else-if="activeTab === 'support'" key="support">
+        <section class="support-grid">
+          <article class="panel inbox-panel">
+            <div class="panel-head"><div><p>LIVECHATT</p><h2>Privata konversationer</h2></div><button @click="loadSupport">Uppdatera</button></div>
+            <p v-if="supportError" class="error">{{ supportError }}</p>
+            <button v-for="conversation in conversations" :key="conversation.id" type="button" class="conversation-row" :class="{ active: selectedConversation?.id === conversation.id }" @click="selectConversation(conversation)">
+              <strong>{{ conversation.userName }}</strong><span>{{ conversation.userEmail }}</span><p>{{ conversation.lastMessage || 'Ingen text ännu' }}</p><em v-if="conversation.unreadForAdmin">{{ conversation.unreadForAdmin }} nya</em>
+            </button>
+            <p v-if="!conversations.length" class="empty-state">Inga chattsamtal ännu.</p>
+          </article>
+          <article class="panel chat-admin-panel">
+            <template v-if="selectedConversation">
+              <div class="panel-head"><div><p>CHATTA MED</p><h2>{{ selectedConversation.userName }}</h2></div><span class="chat-email">{{ selectedConversation.userEmail }}</span></div>
+              <div class="admin-chat-messages"><div v-for="item in selectedMessages" :key="item.id" class="admin-bubble" :class="item.sender"><small>{{ item.sender === 'admin' ? item.senderName || 'Admin' : selectedConversation.userName }}</small><p>{{ item.message }}</p></div></div>
+              <form class="admin-chat-compose" @submit.prevent="sendAdminReply"><textarea v-model="adminReply" rows="3" maxlength="2000" placeholder="Skriv ett svar..."></textarea><button type="submit" :disabled="isSendingReply || !adminReply.trim()">{{ isSendingReply ? 'Skickar...' : 'Skicka svar' }}</button></form>
+            </template>
+            <p v-else class="empty-state">Välj en konversation för att svara.</p>
+          </article>
+          <article class="panel support-contacts">
+            <div class="panel-head"><div><p>KONTAKTA OSS</p><h2>Skickade brev</h2></div><span>{{ contactMessages.length }} totalt</span></div>
+            <div v-for="item in contactMessages" :key="item.id" class="contact-row"><div><strong>{{ item.name }}</strong><span>{{ item.email }} · {{ new Date(item.createdAt).toLocaleString('sv-SE') }}</span></div><p>{{ item.message }}</p></div>
+            <p v-if="!contactMessages.length" class="empty-state">Inga brev ännu.</p>
+          </article>
+        </section>
       </template>
 
       <template v-else-if="activeTab === 'recipes'" key="recipes">
@@ -290,6 +360,7 @@ onBeforeUnmount(() => window.clearInterval(pollTimer))
 .bar-chart{display:flex;align-items:flex-end;gap:4px;height:120px;margin-top:16px;padding-top:8px}.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;gap:6px}.bar{width:100%;max-width:16px;border-radius:3px 3px 0 0;background:#f1e9e3;min-height:2px;transition:height .3s}.bar.filled{background:#c4623f}.bar-label{color:#b6a8a0;font-size:9px}
 .fade-enter-active,.fade-leave-active{transition:opacity .16s ease}.fade-enter-from,.fade-leave-to{opacity:0}
 .recipe-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.recipe-toolbar input,.recipe-toolbar select{min-height:34px;box-sizing:border-box;border:1px solid #e2ddd5;border-radius:7px;background:#fff;padding:0 9px;color:#665850;font:12px Arial,sans-serif}.recipe-toolbar input{flex:1 1 220px}.recipe-toolbar input:focus,.recipe-toolbar select:focus{border-color:#c4623f;box-shadow:0 0 0 3px rgba(196,98,63,.12);outline:none}.create-recipe{display:inline-flex;align-items:center;justify-content:center;border-radius:7px;background:#c4623f;padding:0 12px;color:#fff;font:600 12px Arial,sans-serif;text-decoration:none;box-shadow:0 4px 10px rgba(196,98,63,.2)}.create-recipe:hover{background:#a94e2f}.filter-summary{margin:12px 0 -2px !important;color:#9a8c84 !important;font-size:11px !important;letter-spacing:0 !important}.users>div.recipe-row{padding:11px 0}.empty-state{padding:18px 0;color:#88786f;font-size:12px}
-@media(max-width:760px){.admin-shell{grid-template-columns:1fr}.admin-shell aside{display:none}.metrics{grid-template-columns:repeat(2,1fr)}main{padding:25px 5%}}
+.support-grid{display:grid;grid-template-columns:minmax(220px,.7fr) minmax(320px,1.3fr);gap:14px}.support-contacts{grid-column:1/-1}.conversation-row{position:relative;display:block;width:100%;padding:11px 9px;border:0;border-top:1px solid #f0e7e0;background:transparent;color:#554941;text-align:left;cursor:pointer}.conversation-row:hover,.conversation-row.active{background:#fff1ea}.conversation-row strong,.conversation-row span{display:block}.conversation-row strong{font-size:12px}.conversation-row span,.conversation-row p{color:#95857d;font-size:10px}.conversation-row p{overflow:hidden;margin:4px 0 0;text-overflow:ellipsis;white-space:nowrap}.conversation-row em{position:absolute;right:8px;top:10px;border-radius:999px;background:#c4623f;padding:3px 5px;color:#fff;font-size:9px;font-style:normal}.chat-admin-panel{display:flex;min-height:430px;flex-direction:column}.chat-email{color:#978881;font-size:10px}.admin-chat-messages{display:flex;flex:1;flex-direction:column;gap:7px;min-height:260px;max-height:380px;overflow-y:auto;margin:12px 0;padding:2px}.admin-bubble{max-width:78%;padding:8px 10px;border-radius:10px;background:#f1ece7;color:#493d37}.admin-bubble.admin{align-self:flex-end;background:#c4623f;color:#fff}.admin-bubble small{display:block;margin-bottom:3px;font-size:9px;opacity:.75}.admin-bubble p{margin:0;white-space:pre-wrap;font-size:12px;line-height:1.4}.admin-chat-compose{display:flex;gap:8px;align-items:end}.admin-chat-compose textarea{flex:1;resize:vertical;border:1px solid #e2d7cf;border-radius:7px;padding:8px;font:12px Arial,sans-serif}.admin-chat-compose button{border:0;border-radius:7px;background:#c4623f;padding:9px 11px;color:#fff;font-size:11px;cursor:pointer}.contact-row{padding:11px 0;border-top:1px solid #f0e7e0}.contact-row div{display:flex;justify-content:space-between;gap:10px}.contact-row strong{font-size:12px}.contact-row span{color:#978881;font-size:10px}.contact-row p{margin:5px 0 0;color:#675950;font-size:12px;line-height:1.45;white-space:pre-wrap}
+@media(max-width:760px){.admin-shell{grid-template-columns:1fr}.admin-shell aside{display:none}.metrics{grid-template-columns:repeat(2,1fr)}main{padding:25px 5%}.support-grid{grid-template-columns:1fr}.support-contacts{grid-column:auto}.contact-row div{display:block}.admin-chat-compose{flex-direction:column}.admin-chat-compose button{width:100%}}
 .logout{margin-top:12px;border:1px solid #eaded6;border-radius:6px;background:#fff;padding:8px;color:#786a63;font-size:12px;cursor:pointer;text-align:left}.logout:hover{border-color:#d49a83;color:#b86648}
 </style>

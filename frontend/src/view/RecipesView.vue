@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, type Recipe } from '@/lib/api'
 import { useFavorites } from '@/composables/useFavorites'
@@ -17,6 +17,7 @@ const recipes = ref<Recipe[]>([])
 const suggestedCategories = ref<string[]>([])
 const isLoading = ref(true)
 const loadError = ref('')
+const recipeResults = ref<HTMLElement | null>(null)
 
 async function loadRecipes() {
   isLoading.value = true
@@ -63,6 +64,11 @@ function createRecipe() {
   }
   router.push('/recipes/new')
 }
+async function selectCategory(category: string) {
+  selectedCategory.value = category
+  await nextTick()
+  recipeResults.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 </script>
 
 <template>
@@ -98,7 +104,7 @@ function createRecipe() {
           :key="category"
           type="button"
           :class="{ active: selectedCategory === category }"
-          @click="selectedCategory = category"
+          @click="selectCategory(category)"
         >
           {{ category }}
         </button>
@@ -106,7 +112,8 @@ function createRecipe() {
 
       <p v-if="isLoading" class="empty-state">Laddar recept...</p>
       <p v-else-if="loadError" class="empty-state">{{ loadError }}</p>
-      <transition-group v-else name="card-fade" tag="section" class="recipe-grid" aria-label="Recept">
+      <div v-else ref="recipeResults">
+      <transition-group name="card-fade" tag="section" class="recipe-grid" aria-label="Recept">
         <article v-for="recipe in filteredRecipes" :key="recipe.slug" class="recipe-card">
           <router-link :to="`/recipes/${recipe.slug}`" class="recipe-link">
             <img :src="recipe.image || 'https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=900&q=85'" :alt="recipe.title" />
@@ -122,6 +129,7 @@ function createRecipe() {
         </article>
         <p v-if="filteredRecipes.length === 0" key="empty" class="empty-state">Inga recept matchar din sökning.</p>
       </transition-group>
+      </div>
     </main>
 
     <footer>

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, recipes, categories, contact
+from app.routers import auth, recipes, categories, contact, chat
 from app.database import categories_collection
 
 app = FastAPI(title="Köksboken API")
@@ -24,6 +24,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(recipes.router)
 app.include_router(categories.router)
 app.include_router(contact.router)
+app.include_router(chat.router)
 
 DEFAULT_CATEGORIES = ["Frukost", "Lunch", "Middag", "Fika", "Sallad"]
 
