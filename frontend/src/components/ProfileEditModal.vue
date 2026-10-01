@@ -9,6 +9,11 @@ const { profile, setProfile } = useProfile()
 
 const name = ref('')
 const avatar = ref<string | null>(null)
+const avatarSource = ref<string | null>(null)
+const avatarRotation = ref(0)
+const avatarZoom = ref(1)
+const avatarMoveX = ref(0)
+const avatarMoveY = ref(0)
 const avatarChanged = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -25,6 +30,8 @@ watch(() => props.open, async (isOpen) => {
     window.addEventListener('keydown', onKey)
     name.value = profile.value.name
     avatar.value = profile.value.avatar_url
+    avatarSource.value = profile.value.avatar_url
+    resetAvatarAdjustments()
     avatarChanged.value = false
     error.value = ''
     await nextTick()
@@ -35,6 +42,38 @@ watch(() => props.open, async (isOpen) => {
 })
 onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); document.body.style.overflow = '' })
 
+function resetAvatarAdjustments() {
+  avatarRotation.value = 0
+  avatarZoom.value = 1
+  avatarMoveX.value = 0
+  avatarMoveY.value = 0
+}
+
+function renderAvatar() {
+  if (!avatarSource.value) return
+  const img = new Image()
+  img.onload = () => {
+    const size = 256
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const isQuarterTurn = Math.abs(avatarRotation.value) % 180 === 90
+    const sourceWidth = isQuarterTurn ? img.height : img.width
+    const sourceHeight = isQuarterTurn ? img.width : img.height
+    const scale = Math.max(size / sourceWidth, size / sourceHeight) * avatarZoom.value
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, size, size)
+    ctx.translate(size / 2 + avatarMoveX.value, size / 2 + avatarMoveY.value)
+    ctx.rotate((avatarRotation.value * Math.PI) / 180)
+    ctx.drawImage(img, -(img.width * scale) / 2, -(img.height * scale) / 2, img.width * scale, img.height * scale)
+    avatar.value = canvas.toDataURL('image/jpeg', 0.88)
+  }
+  img.onerror = () => { error.value = 'Kunde inte läsa bilden.' }
+  img.src = avatarSource.value
+}
+
 function onFile(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -44,44 +83,33 @@ function onFile(event: Event) {
   error.value = ''
   const reader = new FileReader()
   reader.onload = () => {
-    const img = new Image()
-    img.onload = () => {
-      const size = 256
-      const side = Math.min(img.width, img.height)
-      const canvas = document.createElement('canvas')
-      canvas.width = size
-      canvas.height = size
-      canvas.getContext('2d')?.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size)
-      avatar.value = canvas.toDataURL('image/jpeg', 0.85)
-      avatarChanged.value = true
-    }
-    img.onerror = () => { error.value = 'Kunde inte läsa bilden.' }
-    img.src = reader.result as string
+    avatarSource.value = reader.result as string
+    resetAvatarAdjustments()
+    renderAvatar()
+    avatarChanged.value = true
   }
   reader.readAsDataURL(file)
 }
-function removeAvatar() { avatar.value = null; avatarChanged.value = true }
+function removeAvatar() {
+  avatar.value = null
+  avatarSource.value = null
+  resetAvatarAdjustments()
+  avatarChanged.value = true
+}
+function restoreAvatar() {
+  if (!avatarSource.value) return
+  resetAvatarAdjustments()
+  renderAvatar()
+  avatarChanged.value = true
+}
 function adjustAvatar(rotation: number, zoom = 1, moveX = 0, moveY = 0) {
-  if (!avatar.value) return
-  const source = avatar.value
-  const img = new Image()
-  img.onload = () => {
-    const canvas = document.createElement('canvas')
-    const size = 256
-    canvas.width = size
-    canvas.height = size
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.fillStyle = '#fff'
-    ctx.fillRect(0, 0, size, size)
-    ctx.translate(size / 2 + moveX, size / 2 + moveY)
-    ctx.rotate((rotation * Math.PI) / 180)
-    const scaled = size * zoom
-    ctx.drawImage(img, -scaled / 2, -scaled / 2, scaled, scaled)
-    avatar.value = canvas.toDataURL('image/jpeg', 0.88)
-    avatarChanged.value = true
-  }
-  img.src = source
+  if (!avatarSource.value) return
+  avatarRotation.value = (avatarRotation.value + rotation) % 360
+  avatarZoom.value *= zoom
+  avatarMoveX.value += moveX
+  avatarMoveY.value += moveY
+  renderAvatar()
+  avatarChanged.value = true
 }
 
 async function save() {
@@ -125,6 +153,7 @@ async function save() {
                 <button type="button" @click="adjustAvatar(-90)">↺ Rotera</button><button type="button" @click="adjustAvatar(90)">Rotera ↻</button>
                 <button type="button" @click="adjustAvatar(0, 1.15)">+ Zooma</button><button type="button" @click="adjustAvatar(0, .85)">− Zooma</button>
                 <button type="button" @click="adjustAvatar(0, 1, -18)">← Flytta</button><button type="button" @click="adjustAvatar(0, 1, 18)">Flytta →</button><button type="button" @click="adjustAvatar(0, 1, 0, -18)">↑ Flytta</button><button type="button" @click="adjustAvatar(0, 1, 0, 18)">↓ Flytta</button>
+                <button type="button" @click="restoreAvatar">Återställ bild</button>
               </div>
               <button v-if="avatar" type="button" class="link" @click="removeAvatar">Ta bort bild</button>
               <p>JPG eller PNG. Bilden beskärs till en kvadrat och kan justeras före sparning.</p>

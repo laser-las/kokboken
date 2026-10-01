@@ -24,7 +24,10 @@ def clean_message(value: str) -> str:
 
 
 async def get_or_create_conversation(user: dict) -> dict:
-    conversation = await chat_conversations_collection.find_one({"user_email": user["email"]})
+    conversation = await chat_conversations_collection.find_one({
+        "user_email": user["email"],
+        "status": {"$ne": "archived"},
+    })
     if conversation:
         return conversation
     now = datetime.now(timezone.utc)

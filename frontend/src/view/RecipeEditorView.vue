@@ -17,6 +17,11 @@ const category = ref('')
 const timeHours = ref(0)
 const timeMinutes = ref(0)
 const image = ref('')
+const imageSource = ref('')
+const imageRotation = ref(0)
+const imageZoom = ref(1)
+const imageMoveX = ref(0)
+const imageMoveY = ref(0)
 const description = ref('')
 const difficulty = ref<'Lätt' | 'Medel' | 'Svår'>('Medel')
 const portions = ref(4)
@@ -53,6 +58,7 @@ onMounted(async () => {
     category.value = r.category
     setDuration(r.time)
     image.value = r.image
+    imageSource.value = r.image
     description.value = r.description
     difficulty.value = ['Lätt', 'Medel', 'Svår'].includes(r.difficulty) ? r.difficulty : 'Medel'
     portions.value = r.portions || 4
@@ -125,6 +131,39 @@ function resizeImage(file: File, maxDim = 1200, quality = 0.82): Promise<string>
   })
 }
 
+function resetImageAdjustments() {
+  imageRotation.value = 0
+  imageZoom.value = 1
+  imageMoveX.value = 0
+  imageMoveY.value = 0
+}
+
+function renderRecipeImage() {
+  if (!imageSource.value) return
+  isProcessingImage.value = true
+  const img = new Image()
+  img.onload = () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = img.width
+    canvas.height = img.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) { isProcessingImage.value = false; return }
+    const isQuarterTurn = Math.abs(imageRotation.value) % 180 === 90
+    const sourceWidth = isQuarterTurn ? img.height : img.width
+    const sourceHeight = isQuarterTurn ? img.width : img.height
+    const scale = Math.max(canvas.width / sourceWidth, canvas.height / sourceHeight) * imageZoom.value
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.translate(canvas.width / 2 + imageMoveX.value, canvas.height / 2 + imageMoveY.value)
+    ctx.rotate((imageRotation.value * Math.PI) / 180)
+    ctx.drawImage(img, -(img.width * scale) / 2, -(img.height * scale) / 2, img.width * scale, img.height * scale)
+    image.value = canvas.toDataURL('image/jpeg', 0.85)
+    isProcessingImage.value = false
+  }
+  img.onerror = () => { errorMessage.value = 'Kunde inte justera bilden.'; isProcessingImage.value = false }
+  img.src = imageSource.value
+}
+
 async function onImageSelected(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
@@ -133,7 +172,9 @@ async function onImageSelected(event: Event) {
   if (file.size > 15 * 1024 * 1024) { errorMessage.value = 'Bilden är för stor (max 15 MB innan komprimering).'; return }
   isProcessingImage.value = true
   try {
-    image.value = await resizeImage(file)
+    imageSource.value = await resizeImage(file)
+    resetImageAdjustments()
+    image.value = imageSource.value
   } catch {
     errorMessage.value = 'Kunde inte bearbeta bilden. Försök med en annan fil.'
   } finally {
@@ -142,32 +183,22 @@ async function onImageSelected(event: Event) {
 }
 function removeImage() {
   image.value = ''
+  imageSource.value = ''
+  resetImageAdjustments()
   if (imageInput.value) imageInput.value.value = ''
 }
+function restoreRecipeImage() {
+  if (!imageSource.value) return
+  resetImageAdjustments()
+  image.value = imageSource.value
+}
 function adjustRecipeImage(rotation: number, zoom = 1, moveX = 0, moveY = 0) {
-  if (!image.value) return
-  isProcessingImage.value = true
-  const source = image.value
-  const img = new Image()
-  img.onload = () => {
-    const canvas = document.createElement('canvas')
-    canvas.width = img.width
-    canvas.height = img.height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) { isProcessingImage.value = false; return }
-    const isQuarterTurn = Math.abs(rotation) % 180 === 90
-    const coverScale = isQuarterTurn ? Math.max(canvas.width / img.height, canvas.height / img.width) : 1
-    const scale = coverScale * zoom
-    ctx.fillStyle = '#fff'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-    ctx.translate(canvas.width / 2 + moveX, canvas.height / 2 + moveY)
-    ctx.rotate((rotation * Math.PI) / 180)
-    ctx.drawImage(img, -(img.width * scale) / 2, -(img.height * scale) / 2, img.width * scale, img.height * scale)
-    image.value = canvas.toDataURL('image/jpeg', 0.85)
-    isProcessingImage.value = false
-  }
-  img.onerror = () => { errorMessage.value = 'Kunde inte justera bilden.'; isProcessingImage.value = false }
-  img.src = source
+  if (!imageSource.value) return
+  imageRotation.value = (imageRotation.value + rotation) % 360
+  imageZoom.value *= zoom
+  imageMoveX.value += moveX
+  imageMoveY.value += moveY
+  renderRecipeImage()
 }
 
 async function save() {
@@ -269,6 +300,7 @@ async function save() {
               <div v-if="image" class="image-adjustments" aria-label="Justera receptbild">
                 <button type="button" @click="adjustRecipeImage(-90)">↺ Rotera</button><button type="button" @click="adjustRecipeImage(90)">Rotera ↻</button><button type="button" @click="adjustRecipeImage(0, 1.15)">+ Zooma</button><button type="button" @click="adjustRecipeImage(0, .85)">− Zooma</button>
                 <button type="button" @click="adjustRecipeImage(0, 1, -35)">← Flytta</button><button type="button" @click="adjustRecipeImage(0, 1, 35)">Flytta →</button><button type="button" @click="adjustRecipeImage(0, 1, 0, -25)">↑ Flytta</button><button type="button" @click="adjustRecipeImage(0, 1, 0, 25)">↓ Flytta</button>
+                <button type="button" @click="restoreRecipeImage">Återställ bild</button>
               </div>
               <button v-if="image" type="button" class="remove-image" @click="removeImage">Ta bort bild</button>
               <small class="hint">JPG eller PNG. Bilden komprimeras automatiskt och kan justeras före sparning.</small>
